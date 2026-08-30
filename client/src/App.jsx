@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { WalletProvider, useWallets } from './context/WalletContext';
 import api, { waitForTokenProvider } from './api/axiosInstance';
@@ -19,8 +19,9 @@ import { LoadingScreen } from './components/LoadingScreen';
 
 function AppContent() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { wallets, createWallet, updateWallet, fetchWallets, loading: walletsLoading } = useWallets();
+  const { wallets, createWallet, updateWallet, deleteWallet, fetchWallets, loading: walletsLoading } = useWallets();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [holdings, setHoldings] = useState([]);
   const [prices, setPrices] = useState({});
@@ -264,6 +265,18 @@ function AppContent() {
     setIsDeleteModalOpen(true);
   };
 
+  // Prompt Delete Wallet
+  const promptDeleteWallet = (wallet, count = 0) => {
+    setDeleteTarget({
+      type: 'wallet',
+      id: wallet._id,
+      title: `Delete Wallet "${wallet.name}"`,
+      description: `Permanently delete wallet "${wallet.name}" and all ${count} associated asset(s).`,
+      requireInputText: count > 0 ? 'DELETE' : '',
+    });
+    setIsDeleteModalOpen(true);
+  };
+
   // Confirm Delete Action
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -281,6 +294,16 @@ function AppContent() {
       showToast(res.data.message || `All holdings cleared from ${deleteTarget.walletName}`, 'success');
       fetchWallets().catch(() => {});
       fetchPortfolioData().catch(() => {});
+    } else if (deleteTarget.type === 'wallet') {
+      await deleteWallet(deleteTarget.id);
+      setHoldings((prev) =>
+        prev.filter((h) => !h.walletId || h.walletId.toString() !== deleteTarget.id.toString())
+      );
+      showToast('Wallet and all associated assets deleted successfully', 'success');
+      fetchPortfolioData().catch(() => {});
+      if (location.pathname === `/wallets/${deleteTarget.id}`) {
+        navigate('/wallets');
+      }
     }
   };
 
@@ -413,6 +436,7 @@ function AppContent() {
                     setWalletToEdit(w);
                     setIsWalletModalOpen(true);
                   }}
+                  onDeleteWallet={promptDeleteWallet}
                 />
               }
             />
@@ -439,6 +463,7 @@ function AppContent() {
                     setWalletToEdit(w);
                     setIsWalletModalOpen(true);
                   }}
+                  onDeleteWallet={promptDeleteWallet}
                   onClearWalletHoldings={promptClearWalletHoldings}
                   rowStatuses={rowStatuses}
                 />

@@ -12,7 +12,13 @@ const ICON_MAP = {
   vault: Vault,
 };
 
-export const WalletsPage = ({ holdings, prices, onOpenAddWallet, onOpenEditWallet }) => {
+export const WalletsPage = ({
+  holdings,
+  prices,
+  onOpenAddWallet,
+  onOpenEditWallet,
+  onDeleteWallet,
+}) => {
   const { wallets, deleteWallet, loading } = useWallets();
 
   const calculateWalletStats = (walletId) => {
@@ -79,9 +85,11 @@ export const WalletsPage = ({ holdings, prices, onOpenAddWallet, onOpenEditWalle
     };
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete wallet "${name}"? Holdings in this wallet will be marked as unassigned.`)) {
-      await deleteWallet(id);
+  const handleDelete = async (wallet, count) => {
+    if (onDeleteWallet) {
+      onDeleteWallet(wallet, count);
+    } else if (window.confirm(`Are you sure you want to delete wallet "${wallet.name}"? All assets in this wallet will be deleted.`)) {
+      await deleteWallet(wallet._id);
     }
   };
 
@@ -200,7 +208,7 @@ export const WalletsPage = ({ holdings, prices, onOpenAddWallet, onOpenEditWalle
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(wallet._id, wallet.name)}
+                        onClick={() => handleDelete(wallet, stats.count)}
                         title="Delete Wallet"
                         className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 transition cursor-pointer"
                       >

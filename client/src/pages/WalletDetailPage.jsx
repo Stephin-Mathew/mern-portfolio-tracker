@@ -21,6 +21,7 @@ export const WalletDetailPage = ({
   onEditClick,
   onOpenAddModalWithWallet,
   onOpenEditWallet,
+  onDeleteWallet,
   onClearWalletHoldings,
   rowStatuses,
 }) => {
@@ -86,7 +87,9 @@ export const WalletDetailPage = ({
 
   const handleDeleteWallet = async () => {
     if (!wallet) return;
-    if (window.confirm(`Are you sure you want to delete wallet "${wallet.name}"? Holdings will be unassigned.`)) {
+    if (onDeleteWallet) {
+      onDeleteWallet(wallet, walletHoldings.length);
+    } else if (window.confirm(`Are you sure you want to delete wallet "${wallet.name}"? All ${walletHoldings.length} assets in this wallet will be deleted.`)) {
       await deleteWallet(wallet._id);
       navigate('/wallets');
     }
