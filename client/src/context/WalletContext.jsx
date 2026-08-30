@@ -1,16 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import api from '../api/axiosInstance';
 import { useAuth } from './AuthContext';
 
 const WalletContext = createContext();
 
 export function WalletProvider({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [wallets, setWallets] = useState([]);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const fetchWallets = useCallback(async () => {
+    if (authLoading) return;
+
     if (!isAuthenticated) {
       setWallets([]);
       setUnassignedCount(0);
@@ -23,15 +25,18 @@ export function WalletProvider({ children }) {
       setWallets(res.data.wallets || []);
       setUnassignedCount(res.data.unassignedCount || 0);
     } catch (err) {
-      console.error('Failed to load wallets:', err);
+      console.warn('Fetch wallets error:', err.message);
+      // Don't silently swallow — re-throw so callers can handle retry
+      throw err;
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authLoading]);
 
-  useEffect(() => {
-    fetchWallets();
-  }, [fetchWallets]);
+  // NOTE: No auto-fetch useEffect here. App.jsx is the single orchestrator
+  // that calls fetchWallets() at the right time after token is ready.
+  // This prevents the race condition where WalletContext and App.jsx both
+  // fire competing fetch requests on login.
 
   const createWallet = async (walletData) => {
     const res = await api.post('/wallets', walletData);

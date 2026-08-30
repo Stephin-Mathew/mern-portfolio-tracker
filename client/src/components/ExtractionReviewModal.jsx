@@ -66,8 +66,14 @@ export const ExtractionReviewModal = ({
   const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
-    setDefaultWalletId(initialWalletId || '');
-  }, [initialWalletId, isOpen]);
+    if (initialWalletId) {
+      setDefaultWalletId(initialWalletId);
+    } else if (wallets.length > 0) {
+      setDefaultWalletId(wallets[0]._id);
+    } else {
+      setDefaultWalletId('');
+    }
+  }, [initialWalletId, isOpen, wallets]);
 
   useEffect(() => {
     if (manualFallback) {

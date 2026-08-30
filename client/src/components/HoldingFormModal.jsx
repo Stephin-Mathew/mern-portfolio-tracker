@@ -31,19 +31,25 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defau
         notes: holdingToEdit.notes || '',
       });
     } else {
+      const initialWallet = defaultWalletId
+        ? wallets.find((w) => w._id === defaultWalletId)
+        : wallets.length > 0
+        ? wallets[0]
+        : null;
+
       setFormData({
         assetType: 'crypto',
         symbol: '',
         quantity: '',
         avgBuyPrice: '',
-        walletId: defaultWalletId || '',
-        walletOrAccount: '',
+        walletId: initialWallet ? initialWallet._id : '',
+        walletOrAccount: initialWallet ? initialWallet.name : '',
         chain: '',
         notes: '',
       });
     }
     setError('');
-  }, [holdingToEdit, isOpen, defaultWalletId]);
+  }, [holdingToEdit, isOpen, defaultWalletId, wallets]);
 
   if (!isOpen) return null;
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { WalletProvider, useWallets } from './context/WalletContext';
-import api from './api/axiosInstance';
+import api, { waitForTokenProvider } from './api/axiosInstance';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardPage } from './pages/DashboardPage';
@@ -15,15 +15,17 @@ import { ScreenshotUploadModal } from './components/ScreenshotUploadModal';
 import { ExtractionReviewModal } from './components/ExtractionReviewModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { AuthModal } from './components/AuthModal';
+import { LoadingScreen } from './components/LoadingScreen';
 
 function AppContent() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { wallets, createWallet, updateWallet, fetchWallets } = useWallets();
+  const { wallets, createWallet, updateWallet, fetchWallets, loading: walletsLoading } = useWallets();
   const location = useLocation();
 
   const [holdings, setHoldings] = useState([]);
   const [prices, setPrices] = useState({});
   const [loading, setLoading] = useState(false);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [refreshingPrices, setRefreshingPrices] = useState(false);
 
   // Sidebar toggle state
@@ -64,30 +66,92 @@ function AppContent() {
   };
 
   // Fetch holdings & prices from API
+  // IMPORTANT: Does NOT reset holdings/prices to empty during re-fetch.
+  // This prevents the $0 portfolio value flash while new data is loading.
   const fetchPortfolioData = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      setHoldings([]);
+      setPrices({});
+      return;
+    }
+
     setLoading(true);
     try {
       const holdingsRes = await api.get('/holdings');
       const fetchedHoldings = holdingsRes.data.holdings || [];
-      setHoldings(fetchedHoldings);
 
       // Fetch live market quotes for symbols present in user's portfolio
       const symbols = [...new Set(fetchedHoldings.map((h) => h.symbol))];
+      let fetchedPrices = {};
       if (symbols.length > 0) {
         const pricesRes = await api.get(`/prices?symbols=${symbols.join(',')}`);
-        setPrices(pricesRes.data.prices || {});
+        fetchedPrices = pricesRes.data.prices || {};
       }
+
+      // Atomically update both holdings AND prices together
+      // This prevents the intermediate state where holdings are updated but prices are still {}
+      setHoldings(fetchedHoldings);
+      setPrices((prevPrices) => ({ ...prevPrices, ...fetchedPrices }));
     } catch (err) {
-      console.error('Failed to load portfolio data:', err);
+      console.warn('Portfolio data fetch warning:', err.message);
+      // Don't clear existing data on error — keep stale data visible
+      throw err;
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authLoading]);
 
+  // Synchronized initial load for wallets, holdings & prices
+  // Uses retry logic to handle the case where Clerk token isn't ready on first attempt
   useEffect(() => {
-    fetchPortfolioData();
-  }, [fetchPortfolioData]);
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      setHoldings([]);
+      setPrices({});
+      setInitialDataLoaded(true);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadAllData = async (attempt = 1) => {
+      try {
+        // Wait for token provider to be registered before making any API calls
+        await waitForTokenProvider();
+
+        // Fetch wallets and portfolio data in parallel
+        // Using Promise.all (not allSettled) — if either fails, we retry
+        await Promise.all([fetchWallets(), fetchPortfolioData()]);
+
+        if (isMounted) {
+          setInitialDataLoaded(true);
+        }
+      } catch (err) {
+        console.warn(`Initial data load attempt ${attempt} failed:`, err.message);
+
+        // Retry up to 3 times with increasing delay (500ms, 1000ms, 2000ms)
+        if (attempt < 3 && isMounted) {
+          const delay = Math.min(500 * Math.pow(2, attempt - 1), 2000);
+          await new Promise((r) => setTimeout(r, delay));
+          if (isMounted) return loadAllData(attempt + 1);
+        }
+
+        // After max retries, show the dashboard anyway (with whatever data we have)
+        if (isMounted) {
+          console.warn('Max retries reached — showing dashboard with available data');
+          setInitialDataLoaded(true);
+        }
+      }
+    };
+
+    loadAllData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, authLoading, fetchWallets, fetchPortfolioData]);
 
   // Automatically close auth modal upon successful sign-in
   useEffect(() => {
@@ -102,7 +166,7 @@ function AppContent() {
     setRefreshingPrices(true);
     try {
       const res = await api.post('/prices/refresh');
-      setPrices(res.data.prices || {});
+      setPrices((prev) => ({ ...prev, ...(res.data.prices || {}) }));
       showToast('Price quotes updated live', 'success');
     } catch (err) {
       showToast('Failed to refresh prices', 'error');
@@ -122,8 +186,8 @@ function AppContent() {
       setHoldings([res.data.holding, ...holdings]);
       showToast('Holding added to portfolio', 'success');
     }
-    fetchPortfolioData();
-    fetchWallets();
+    fetchPortfolioData().catch(() => {});
+    fetchWallets().catch(() => {});
   };
 
   // Save Wallet Form (Create or Update)
@@ -161,9 +225,9 @@ function AppContent() {
       }, 2500);
 
       if (updatedFields.symbol && updatedFields.symbol !== originalHolding.symbol) {
-        fetchPortfolioData();
+        fetchPortfolioData().catch(() => {});
       }
-      fetchWallets();
+      fetchWallets().catch(() => {});
     } catch (err) {
       console.error('Optimistic edit failed, rolling back:', err);
       setHoldings((prev) => prev.map((h) => (h._id === id ? originalHolding : h)));
@@ -208,15 +272,15 @@ function AppContent() {
       await api.delete(`/holdings/${deleteTarget.id}`);
       setHoldings((prev) => prev.filter((h) => h._id !== deleteTarget.id));
       showToast('Holding deleted from portfolio', 'success');
-      fetchWallets();
+      fetchWallets().catch(() => {});
     } else if (deleteTarget.type === 'wallet_holdings') {
       const res = await api.delete(`/holdings/wallet/${deleteTarget.id}`);
       setHoldings((prev) =>
         prev.filter((h) => !h.walletId || h.walletId.toString() !== deleteTarget.id.toString())
       );
       showToast(res.data.message || `All holdings cleared from ${deleteTarget.walletName}`, 'success');
-      fetchWallets();
-      fetchPortfolioData();
+      fetchWallets().catch(() => {});
+      fetchPortfolioData().catch(() => {});
     }
   };
 
@@ -241,19 +305,12 @@ function AppContent() {
   const handleBatchSaveSuccess = (newHoldings) => {
     setHoldings([...newHoldings, ...holdings]);
     showToast(`Successfully added ${newHoldings.length} holdings from screenshot extraction`, 'success');
-    fetchPortfolioData();
-    fetchWallets();
+    fetchPortfolioData().catch(() => {});
+    fetchWallets().catch(() => {});
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center dark:bg-slate-950 bg-slate-50 dark:text-slate-400 text-slate-600 transition-colors duration-300">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="w-10 h-10 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin shadow-lg shadow-cyan-500/20" />
-          <span className="text-sm font-semibold tracking-wide">Initializing Portfolio Engine...</span>
-        </div>
-      </div>
-    );
+  if (authLoading || (isAuthenticated && !initialDataLoaded)) {
+    return <LoadingScreen />;
   }
 
   return (

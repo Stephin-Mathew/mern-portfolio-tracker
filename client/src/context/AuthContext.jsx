@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useAuth as useClerkAuth, useUser, useClerk } from '@clerk/clerk-react';
 import api, { setAuthTokenProvider } from '../api/axiosInstance';
 
@@ -8,23 +8,32 @@ export const AuthProvider = ({ children }) => {
   const { isLoaded: isAuthLoaded, isSignedIn, getToken } = useClerkAuth();
   const { isLoaded: isUserLoaded, user: clerkUser } = useUser();
   const clerk = useClerk();
+  const tokenProviderSet = useRef(false);
 
   const loading = !isAuthLoaded || !isUserLoaded;
   const isAuthenticated = Boolean(isSignedIn);
 
   // Register dynamic Clerk token provider for all Axios requests
+  // Use a ref guard to ensure we only register once per sign-in state change
+  // and register as early as possible (not waiting for next tick)
   useEffect(() => {
-    setAuthTokenProvider(async () => {
+    if (!isAuthLoaded) return;
+
+    // Always update the token provider when auth state changes
+    setAuthTokenProvider(async (forceRefresh = false) => {
       if (isSignedIn) {
-        return await getToken();
+        return await getToken(forceRefresh ? { skipCache: true } : undefined);
       }
       return null;
     });
-  }, [isSignedIn, getToken]);
+    tokenProviderSet.current = true;
+  }, [isAuthLoaded, isSignedIn, getToken]);
 
   // Sync user with MongoDB backend when signed in
+  // Only fires after token provider is set (via the dependency on isAuthenticated which
+  // is derived from isSignedIn, and the token provider effect runs first in the same cycle)
   useEffect(() => {
-    if (isSignedIn && clerkUser) {
+    if (isSignedIn && clerkUser && tokenProviderSet.current) {
       api.get('/auth/me').catch((err) => {
         console.warn('Backend user sync warning:', err.response?.data?.message || err.message);
       });
@@ -76,4 +85,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
