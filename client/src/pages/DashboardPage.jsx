@@ -16,6 +16,8 @@ export const DashboardPage = ({
   onUpdateHolding,
   onDeleteHolding,
   onEditClick,
+  onUpdatePrice,
+  onResetPrice,
   onOpenAuthModal,
   onOpenAddWalletModal,
   rowStatuses,
@@ -91,6 +93,8 @@ export const DashboardPage = ({
         onUpdateHolding={onUpdateHolding}
         onDeleteHolding={onDeleteHolding}
         onEditClick={onEditClick}
+        onUpdatePrice={onUpdatePrice}
+        onResetPrice={onResetPrice}
         rowStatuses={rowStatuses}
       />
     </div>

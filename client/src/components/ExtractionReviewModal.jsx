@@ -33,6 +33,10 @@ const TierBadge = ({ tier }) => {
       label: '✋ Manual entry',
       className: 'bg-slate-500/10 border-slate-500/30 text-slate-500 dark:text-slate-400',
     },
+    json_paste: {
+      label: '📋 Pasted from JSON',
+      className: 'bg-violet-500/10 border-violet-500/30 text-violet-600 dark:text-violet-400',
+    },
   };
 
   const badge = badges[tier];

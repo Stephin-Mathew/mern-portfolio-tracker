@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { UserButton } from '@clerk/clerk-react';
@@ -13,12 +13,15 @@ import {
   Menu,
   Sun,
   Moon,
+  ChevronDown,
+  Braces,
 } from 'lucide-react';
 
 export const Navbar = ({
   onToggleSidebar,
   onOpenAddModal,
   onOpenUploadModal,
+  onOpenJsonExtractModal,
   onOpenAuthModal,
   onOpenAddWalletModal,
   onRefreshPrices,
@@ -27,6 +30,23 @@ export const Navbar = ({
 }) => {
   const { user, logout, isAuthenticated, openSignIn } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
+
+  // Extract dropdown state
+  const [isExtractDropdownOpen, setIsExtractDropdownOpen] = useState(false);
+  const extractDropdownRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (extractDropdownRef.current && !extractDropdownRef.current.contains(e.target)) {
+        setIsExtractDropdownOpen(false);
+      }
+    };
+    if (isExtractDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isExtractDropdownOpen]);
 
   const handleSignIn = () => {
     if (onOpenAuthModal) {
@@ -112,15 +132,67 @@ export const Navbar = ({
                 </button>
               )}
 
-              {/* AI Vision Extraction Button */}
-              <button
-                onClick={onOpenUploadModal}
-                className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-xs sm:text-sm shadow-md shadow-cyan-500/20 transition-all hover:scale-[1.03] cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 animate-pulse-slow text-cyan-100" />
-                <span className="hidden xs:inline">Extract Screenshot</span>
-                <span className="xs:hidden">AI Extract</span>
-              </button>
+              {/* Extract Screenshot Dropdown */}
+              <div className="relative" ref={extractDropdownRef}>
+                <div className="flex items-center">
+                  {/* Primary Button — opens AI Extract directly */}
+                  <button
+                    onClick={() => {
+                      onOpenUploadModal();
+                      setIsExtractDropdownOpen(false);
+                    }}
+                    className="flex items-center space-x-2 pl-3.5 pr-2 py-2 rounded-l-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-xs sm:text-sm shadow-md shadow-cyan-500/20 transition-all hover:scale-[1.03] cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 animate-pulse-slow text-cyan-100" />
+                    <span className="hidden xs:inline">AI Extract</span>
+                    <span className="xs:hidden">AI</span>
+                  </button>
+                  {/* Chevron Toggle */}
+                  <button
+                    onClick={() => setIsExtractDropdownOpen((prev) => !prev)}
+                    className="flex items-center px-1.5 py-2 rounded-r-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border-l border-white/20 shadow-md shadow-cyan-500/20 transition-all cursor-pointer"
+                  >
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExtractDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Dropdown Menu */}
+                {isExtractDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-700 border-slate-200 shadow-2xl dark:shadow-slate-950/60 overflow-hidden z-50 animate-fadeIn">
+                    <button
+                      onClick={() => {
+                        onOpenUploadModal();
+                        setIsExtractDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center space-x-3 px-4 py-3 text-xs font-semibold dark:text-slate-200 text-slate-800 dark:hover:bg-slate-800 hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+                        <Sparkles className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold">AI Extract</p>
+                        <p className="text-[10px] dark:text-slate-500 text-slate-400 font-normal">Upload screenshot, auto-extract with AI</p>
+                      </div>
+                    </button>
+                    <div className="dark:border-slate-800 border-slate-100 border-t" />
+                    <button
+                      onClick={() => {
+                        onOpenJsonExtractModal();
+                        setIsExtractDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center space-x-3 px-4 py-3 text-xs font-semibold dark:text-slate-200 text-slate-800 dark:hover:bg-slate-800 hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-500 to-fuchsia-600 flex items-center justify-center shrink-0">
+                        <Braces className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold">JSON Extract</p>
+                        <p className="text-[10px] dark:text-slate-500 text-slate-400 font-normal">Paste JSON from your own LLM</p>
+                      </div>
+                    </button>
+                  </div>
+                )}{/* end dropdown menu */}
+              </div>{/* end dropdown wrapper */}
 
               {/* Add Holding Button */}
               <button

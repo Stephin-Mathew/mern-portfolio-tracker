@@ -14,8 +14,11 @@ import {
   ChevronRight,
   Network,
   Clock,
+  Lock,
+  Link2,
 } from 'lucide-react';
 import { useWallets } from '../context/WalletContext';
+import { PriceEditModal } from './PriceEditModal';
 
 export const HoldingsTable = ({
   holdings,
@@ -23,9 +26,20 @@ export const HoldingsTable = ({
   onUpdateHolding,
   onDeleteHolding,
   onEditClick,
+  onUpdatePrice,
+  onResetPrice,
   rowStatuses = {},
 }) => {
   const { wallets } = useWallets();
+
+  // Price Edit Modal state
+  const [priceModalSymbol, setPriceModalSymbol] = useState(null);
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+
+  const handleOpenPriceModal = (sym) => {
+    setPriceModalSymbol(sym);
+    setIsPriceModalOpen(true);
+  };
 
   // Crypto Timeframe Filter for Period PnL: '24h' (Yesterday), '7d' (Last Week), '30d'
   const [cryptoTimeframe, setCryptoTimeframe] = useState('24h');
@@ -499,7 +513,40 @@ export const HoldingsTable = ({
 
                     {/* Live Price */}
                     <td className="py-4 px-4 text-right font-mono font-medium dark:text-slate-200 text-slate-800">
-                      {h.assetType === 'cash' ? '$1.00' : formatUSD(currentPrice)}
+                      {h.assetType === 'cash' ? (
+                        '$1.00'
+                      ) : (
+                        <div
+                          onClick={() => onUpdatePrice && handleOpenPriceModal(h.symbol)}
+                          className={`inline-flex items-center justify-end space-x-1.5 rounded-lg px-2 py-1 transition cursor-pointer ${
+                            onUpdatePrice ? 'hover:bg-cyan-500/10 hover:text-cyan-500 dark:hover:text-cyan-400 group/price' : ''
+                          }`}
+                          title={
+                            priceInfo.mappedSymbol
+                              ? `Mapped to ${priceInfo.mappedSymbol} live quote (Click to edit or unmap)`
+                              : priceInfo.isCustom
+                              ? `Custom locked price (won't auto-refresh). Click to edit or unlock.`
+                              : `Click to edit price, lock price, or map ticker`
+                          }
+                        >
+                          {priceInfo.mappedSymbol ? (
+                            <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                              <Link2 className="w-2.5 h-2.5 mr-0.5" />
+                              <span>{priceInfo.mappedSymbol}</span>
+                            </span>
+                          ) : priceInfo.isCustom ? (
+                            <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              <Lock className="w-2.5 h-2.5 mr-0.5" />
+                              <span>Locked</span>
+                            </span>
+                          ) : null}
+
+                          <span>{formatUSD(currentPrice)}</span>
+                          {onUpdatePrice && (
+                            <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover/price:opacity-100 transition" />
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* Total Value */}
@@ -619,7 +666,43 @@ export const HoldingsTable = ({
 
                     {/* Live Market Price */}
                     <td className="py-4 px-4 text-right font-mono font-medium dark:text-slate-200 text-slate-800">
-                      {group.assetType === 'cash' ? '$1.00' : formatUSD(group.livePrice)}
+                      {group.assetType === 'cash' ? (
+                        '$1.00'
+                      ) : (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdatePrice && handleOpenPriceModal(group.symbol);
+                          }}
+                          className={`inline-flex items-center justify-end space-x-1.5 rounded-lg px-2 py-1 transition cursor-pointer ${
+                            onUpdatePrice ? 'hover:bg-cyan-500/20 hover:text-cyan-500 dark:hover:text-cyan-400 group/price' : ''
+                          }`}
+                          title={
+                            priceInfo.mappedSymbol
+                              ? `Mapped to ${priceInfo.mappedSymbol} live quote (Click to edit or unmap)`
+                              : priceInfo.isCustom
+                              ? `Custom locked price (won't auto-refresh). Click to edit or unlock.`
+                              : `Click to edit price, lock price, or map ticker`
+                          }
+                        >
+                          {priceInfo.mappedSymbol ? (
+                            <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                              <Link2 className="w-2.5 h-2.5 mr-0.5" />
+                              <span>{priceInfo.mappedSymbol}</span>
+                            </span>
+                          ) : priceInfo.isCustom ? (
+                            <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              <Lock className="w-2.5 h-2.5 mr-0.5" />
+                              <span>Locked</span>
+                            </span>
+                          ) : null}
+
+                          <span>{formatUSD(group.livePrice)}</span>
+                          {onUpdatePrice && (
+                            <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover/price:opacity-100 transition" />
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* Total Aggregated Value */}
@@ -832,6 +915,19 @@ export const HoldingsTable = ({
           </tbody>
         </table>
       </div>
+
+      {/* Price Override / Mapping Modal */}
+      <PriceEditModal
+        isOpen={isPriceModalOpen}
+        onClose={() => {
+          setIsPriceModalOpen(false);
+          setPriceModalSymbol(null);
+        }}
+        symbol={priceModalSymbol}
+        currentPriceInfo={priceModalSymbol ? prices[priceModalSymbol] || {} : {}}
+        onSavePrice={onUpdatePrice}
+        onResetPrice={onResetPrice}
+      />
     </div>
   );
 };

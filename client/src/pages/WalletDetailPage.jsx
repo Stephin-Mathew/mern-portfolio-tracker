@@ -23,6 +23,8 @@ export const WalletDetailPage = ({
   onOpenEditWallet,
   onDeleteWallet,
   onClearWalletHoldings,
+  onUpdatePrice,
+  onResetPrice,
   rowStatuses,
 }) => {
   const { id } = useParams();
@@ -277,6 +279,8 @@ export const WalletDetailPage = ({
           onUpdateHolding={onUpdateHolding}
           onDeleteHolding={onDeleteHolding}
           onEditClick={onEditClick}
+          onUpdatePrice={onUpdatePrice}
+          onResetPrice={onResetPrice}
           rowStatuses={rowStatuses}
         />
       </div>

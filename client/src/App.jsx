@@ -12,6 +12,7 @@ import { WalletDetailPage } from './pages/WalletDetailPage';
 import { HoldingFormModal } from './components/HoldingFormModal';
 import { WalletFormModal } from './components/WalletFormModal';
 import { ScreenshotUploadModal } from './components/ScreenshotUploadModal';
+import { JsonExtractModal } from './components/JsonExtractModal';
 import { ExtractionReviewModal } from './components/ExtractionReviewModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { AuthModal } from './components/AuthModal';
@@ -48,6 +49,7 @@ function AppContent() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isJsonExtractModalOpen, setIsJsonExtractModalOpen] = useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -173,6 +175,49 @@ function AppContent() {
       showToast('Failed to refresh prices', 'error');
     } finally {
       setRefreshingPrices(false);
+    }
+  };
+
+  // Update Custom Price or Ticker Mapping
+  const handleUpdatePrice = async (symbol, overrideData) => {
+    try {
+      const res = await api.post('/prices/override', {
+        symbol,
+        ...overrideData,
+      });
+      if (res.data.price) {
+        setPrices((prev) => ({
+          ...prev,
+          [symbol.toUpperCase()]: res.data.price,
+        }));
+      }
+      showToast(res.data.message || `Price updated for ${symbol}`, 'success');
+      fetchPortfolioData().catch(() => {});
+      fetchWallets().catch(() => {});
+    } catch (err) {
+      console.error('Failed to update price override:', err);
+      showToast(err.response?.data?.message || 'Failed to update price', 'error');
+      throw err;
+    }
+  };
+
+  // Reset Custom Price to Live Market Quote
+  const handleResetPrice = async (symbol) => {
+    try {
+      const res = await api.delete(`/prices/override/${symbol}`);
+      if (res.data.price) {
+        setPrices((prev) => ({
+          ...prev,
+          [symbol.toUpperCase()]: res.data.price,
+        }));
+      }
+      showToast(res.data.message || `Reset ${symbol} to live market price`, 'success');
+      fetchPortfolioData().catch(() => {});
+      fetchWallets().catch(() => {});
+    } catch (err) {
+      console.error('Failed to reset price override:', err);
+      showToast(err.response?.data?.message || 'Failed to reset price', 'error');
+      throw err;
     }
   };
 
@@ -381,6 +426,7 @@ function AppContent() {
             setIsWalletModalOpen(true);
           }}
           onOpenUploadModal={() => setIsUploadModalOpen(true)}
+          onOpenJsonExtractModal={() => setIsJsonExtractModalOpen(true)}
           onOpenAuthModal={() => setIsAuthModalOpen(true)}
           onRefreshPrices={handleRefreshPrices}
           refreshingPrices={refreshingPrices}
@@ -407,6 +453,8 @@ function AppContent() {
                     setTargetWalletId(holding.walletId || '');
                     setIsFormModalOpen(true);
                   }}
+                  onUpdatePrice={handleUpdatePrice}
+                  onResetPrice={handleResetPrice}
                   onOpenAuthModal={() => setIsAuthModalOpen(true)}
                   onOpenAddWalletModal={() => {
                     setWalletToEdit(null);
@@ -465,6 +513,8 @@ function AppContent() {
                   }}
                   onDeleteWallet={promptDeleteWallet}
                   onClearWalletHoldings={promptClearWalletHoldings}
+                  onUpdatePrice={handleUpdatePrice}
+                  onResetPrice={handleResetPrice}
                   rowStatuses={rowStatuses}
                 />
               }
@@ -508,6 +558,12 @@ function AppContent() {
         onClose={() => setIsUploadModalOpen(false)}
         onExtracted={handleExtractedResults}
         onExtractionFailed={handleExtractionFailed}
+      />
+
+      <JsonExtractModal
+        isOpen={isJsonExtractModalOpen}
+        onClose={() => setIsJsonExtractModalOpen(false)}
+        onExtracted={handleExtractedResults}
       />
 
       <ExtractionReviewModal

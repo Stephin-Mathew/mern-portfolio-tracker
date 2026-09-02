@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2,
   Info,
+  Trash2,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/axiosInstance';
@@ -32,6 +33,8 @@ export const AnalyticsPage = ({ holdings = [], prices = {} }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [activeComponent, setActiveComponent] = useState('total'); // 'total' | 'crypto' | 'stock' | 'cash'
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const chartRef = useRef(null);
 
@@ -53,6 +56,24 @@ export const AnalyticsPage = ({ holdings = [], prices = {} }) => {
       console.error('Failed to load analytical chart data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      setTimeout(() => setConfirmClear(false), 3000);
+      return;
+    }
+    setClearing(true);
+    try {
+      await api.delete('/portfolio/history');
+      setConfirmClear(false);
+      fetchHistory(timeframe);
+    } catch (err) {
+      console.error('Failed to clear portfolio history:', err);
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -174,6 +195,21 @@ export const AnalyticsPage = ({ holdings = [], prices = {} }) => {
           >
             {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             <span>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+          </button>
+
+          {/* Reset History Button */}
+          <button
+            onClick={handleClearHistory}
+            disabled={clearing}
+            title={confirmClear ? 'Click again to confirm' : 'Reset all portfolio history data'}
+            className={`flex items-center space-x-1 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer shadow-sm ${
+              confirmClear
+                ? 'bg-rose-500/15 border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/25'
+                : 'dark:bg-slate-800/80 bg-slate-100 dark:hover:bg-slate-700 hover:bg-slate-200 dark:border-slate-700 border-slate-300 dark:text-slate-400 text-slate-500 hover:text-rose-500 dark:hover:text-rose-400'
+            }`}
+          >
+            <Trash2 className={`w-3.5 h-3.5 ${clearing ? 'animate-spin' : ''}`} />
+            <span>{confirmClear ? 'Confirm Reset?' : 'Reset History'}</span>
           </button>
         </div>
       </div>

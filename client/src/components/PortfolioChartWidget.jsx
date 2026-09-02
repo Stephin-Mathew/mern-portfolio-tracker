@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Maximize2, ExternalLink, Calendar, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, Maximize2, ExternalLink, Calendar, RefreshCw, Trash2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/axiosInstance';
 
@@ -11,6 +11,8 @@ export const PortfolioChartWidget = ({ holdings = [], prices = {} }) => {
   const [historyData, setHistoryData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const chartRef = useRef(null);
 
   const timeframes = [
@@ -40,6 +42,24 @@ export const PortfolioChartWidget = ({ holdings = [], prices = {} }) => {
 
   const handleChartClick = () => {
     navigate('/analytics', { state: { initialTimeframe: timeframe } });
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      setTimeout(() => setConfirmClear(false), 3000);
+      return;
+    }
+    setClearing(true);
+    try {
+      await api.delete('/portfolio/history');
+      setConfirmClear(false);
+      fetchHistory(timeframe);
+    } catch (err) {
+      console.error('Failed to clear portfolio history:', err);
+    } finally {
+      setClearing(false);
+    }
   };
 
   const points = historyData?.dataPoints || [];
@@ -174,6 +194,24 @@ export const PortfolioChartWidget = ({ holdings = [], prices = {} }) => {
           >
             <span>Study Chart</span>
             <ExternalLink className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition" />
+          </button>
+
+          {/* Reset History Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClearHistory();
+            }}
+            disabled={clearing}
+            title={confirmClear ? 'Click again to confirm' : 'Reset all portfolio history data'}
+            className={`flex items-center space-x-1 px-2.5 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer shadow-sm ${
+              confirmClear
+                ? 'bg-rose-500/15 border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/25'
+                : 'dark:bg-slate-800/80 bg-slate-100 dark:hover:bg-slate-700 hover:bg-slate-200 dark:border-slate-700 border-slate-300 dark:text-slate-400 text-slate-500 hover:text-rose-500 dark:hover:text-rose-400'
+            }`}
+          >
+            <Trash2 className={`w-3.5 h-3.5 ${clearing ? 'animate-spin' : ''}`} />
+            {confirmClear && <span>Confirm?</span>}
           </button>
         </div>
       </div>
