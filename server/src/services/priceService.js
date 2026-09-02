@@ -204,16 +204,16 @@ export const fetchAndCachePrices = async (symbols = []) => {
   for (const sym of symbols) {
     if (!result[sym]) {
       const fallbackEntry = FALLBACK_PRICES[sym] || {
-        price: sym.length <= 4 ? 42.0 : 10.0,
-        change24h: 1.5,
-        change7d: 4.0,
-        change30d: 8.0,
+        price: 0,
+        change24h: 0,
+        change7d: 0,
+        change30d: 0,
       };
 
       const basePrice = fallbackEntry.price;
-      // Small +/- 0.5% dynamic variance to simulate real live ticker updates
-      const variance = (Math.random() - 0.5) * 0.01 * basePrice;
-      const livePrice = Number((basePrice + variance).toFixed(6));
+      // Small +/- 0.5% dynamic variance only for known baseline assets
+      const variance = basePrice > 0 ? (Math.random() - 0.5) * 0.01 * basePrice : 0;
+      const livePrice = basePrice > 0 ? Number((basePrice + variance).toFixed(6)) : 0;
 
       result[sym] = {
         price: livePrice,

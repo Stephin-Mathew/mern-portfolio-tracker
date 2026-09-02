@@ -1,5 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, CheckCircle, Trash2, Plus, ShieldCheck, ArrowUpDown, ChevronUp, ChevronDown, Sparkles, RefreshCw, Hand, AlertTriangle } from 'lucide-react';
+import {
+  X,
+  CheckCircle,
+  Trash2,
+  Plus,
+  ShieldCheck,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
+  Sparkles,
+  RefreshCw,
+  Hand,
+  AlertTriangle,
+  Lock,
+  Link2,
+  Zap,
+  DollarSign,
+  AlertCircle,
+  Info,
+} from 'lucide-react';
 import api from '../api/axiosInstance';
 import { useWallets } from '../context/WalletContext';
 
@@ -13,7 +32,6 @@ const TierBadge = ({ tier }) => {
       className: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600 dark:text-cyan-400',
     },
     gemini: {
-      // Legacy alias — kept for backward compatibility
       label: '✨ Extracted via AI',
       className: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600 dark:text-cyan-400',
     },
@@ -61,6 +79,8 @@ export const ExtractionReviewModal = ({
 }) => {
   const { wallets } = useWallets();
   const [items, setItems] = useState([]);
+  const [livePrices, setLivePrices] = useState({});
+  const [loadingPrices, setLoadingPrices] = useState(false);
   const [defaultWalletId, setDefaultWalletId] = useState(initialWalletId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -79,6 +99,28 @@ export const ExtractionReviewModal = ({
     }
   }, [initialWalletId, isOpen, wallets]);
 
+  // Fetch live market quotes for all extracted symbols upon open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const symbols = [...new Set(extractedItems.map((it) => it.symbol).filter(Boolean))];
+    if (symbols.length === 0) return;
+
+    const fetchQuotes = async () => {
+      setLoadingPrices(true);
+      try {
+        const res = await api.get(`/prices?symbols=${symbols.join(',')}`);
+        setLivePrices(res.data.prices || {});
+      } catch (err) {
+        console.warn('Failed to load market prices for review modal:', err.message);
+      } finally {
+        setLoadingPrices(false);
+      }
+    };
+
+    fetchQuotes();
+  }, [isOpen, extractedItems]);
+
   useEffect(() => {
     if (manualFallback) {
       // Manual fallback mode — start with one empty row
@@ -87,6 +129,11 @@ export const ExtractionReviewModal = ({
           tempId: Date.now(),
           symbol: '',
           quantity: 1,
+          extractedPrice: null,
+          totalValue: null,
+          priceAction: 'live',
+          mappedSymbol: '',
+          customPrice: '',
           avgBuyPrice: 0,
           assetType: 'crypto',
           walletId: '',
@@ -97,22 +144,71 @@ export const ExtractionReviewModal = ({
       ]);
     } else if (extractedItems && extractedItems.length > 0) {
       setItems(
-        extractedItems.map((item, idx) => ({
-          ...item,
-          tempId: idx + 1,
-          walletId: item.walletId || '',
-          chain: item.chain || '',
-        }))
+        extractedItems.map((item, idx) => {
+          const ep = item.extractedPrice !== undefined && item.extractedPrice !== null ? Number(item.extractedPrice) : null;
+          const tv = item.totalValue !== undefined && item.totalValue !== null ? Number(item.totalValue) : null;
+
+          // Default strategy: if extractedPrice exists, choose 'screenshot' to protect user from wrong CMC token matches
+          const defaultAction = ep && ep > 0 ? 'screenshot' : 'live';
+
+          return {
+            ...item,
+            tempId: idx + 1,
+            extractedPrice: ep,
+            totalValue: tv,
+            priceAction: defaultAction, // 'screenshot' | 'live' | 'mapped' | 'custom'
+            mappedSymbol: '',
+            customPrice: ep ? String(ep) : '',
+            walletId: item.walletId || '',
+            chain: item.chain || '',
+          };
+        })
       );
     }
   }, [extractedItems, manualFallback]);
+
+  // Helper to format currency
+  const formatUSD = (num) => {
+    const n = Number(num);
+    if (isNaN(n)) return '—';
+    if (n !== 0 && Math.abs(n) < 0.01) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(n);
+    }
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  };
+
+  // Analyze price discrepancies for an item
+  const getItemPriceAnalysis = (item) => {
+    if (item.assetType === 'cash') {
+      return { isMismatch: false, livePrice: 1, diffPct: 0, isUnlisted: false };
+    }
+
+    const liveQuote = livePrices[item.symbol?.toUpperCase()];
+    const livePrice = typeof liveQuote === 'object' ? Number(liveQuote.price || 0) : Number(liveQuote || 0);
+    const screenshotPrice = item.extractedPrice !== null && item.extractedPrice !== undefined ? Number(item.extractedPrice) : null;
+
+    if (screenshotPrice !== null && screenshotPrice > 0) {
+      if (livePrice === 0) {
+        return { isMismatch: true, livePrice: 0, diffPct: 100, isUnlisted: true };
+      }
+      const diffPct = (Math.abs(livePrice - screenshotPrice) / screenshotPrice) * 100;
+      return { isMismatch: diffPct > 15, livePrice, diffPct, isUnlisted: false };
+    }
+
+    return { isMismatch: false, livePrice, diffPct: 0, isUnlisted: livePrice === 0 };
+  };
+
+  // Check if any items have price mismatches
+  const hasMismatches = useMemo(() => {
+    return items.some((it) => getItemPriceAnalysis(it).isMismatch);
+  }, [items, livePrices]);
 
   const handleSort = (field) => {
     if (sortField === field) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
-      const isNumeric = ['quantity', 'avgBuyPrice'].includes(field);
+      const isNumeric = ['quantity', 'avgBuyPrice', 'extractedPrice', 'totalValue'].includes(field);
       setSortDirection(isNumeric ? 'desc' : 'asc');
     }
   };
@@ -123,7 +219,7 @@ export const ExtractionReviewModal = ({
       let valA = a[sortField];
       let valB = b[sortField];
 
-      if (['quantity', 'avgBuyPrice'].includes(sortField)) {
+      if (['quantity', 'avgBuyPrice', 'extractedPrice', 'totalValue'].includes(sortField)) {
         valA = Number(valA) || 0;
         valB = Number(valB) || 0;
       } else {
@@ -171,6 +267,11 @@ export const ExtractionReviewModal = ({
         tempId: Date.now(),
         symbol: '',
         quantity: 1,
+        extractedPrice: null,
+        totalValue: null,
+        priceAction: 'live',
+        mappedSymbol: '',
+        customPrice: '',
         avgBuyPrice: 0,
         assetType: 'crypto',
         walletId: defaultWalletId || '',
@@ -181,6 +282,16 @@ export const ExtractionReviewModal = ({
     ]);
   };
 
+  // Bulk actions for all items
+  const handleBulkSetStrategy = (strategy) => {
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        priceAction: strategy,
+      }))
+    );
+  };
+
   const handleConfirmSave = async () => {
     setError('');
 
@@ -188,6 +299,13 @@ export const ExtractionReviewModal = ({
     const invalidItem = items.find((it) => !it.symbol || !it.quantity || Number(it.quantity) <= 0);
     if (invalidItem) {
       setError('Please ensure all items have a valid Symbol and positive Quantity before saving.');
+      return;
+    }
+
+    // Validate mapped items
+    const invalidMapping = items.find((it) => it.priceAction === 'mapped' && (!it.mappedSymbol || !it.mappedSymbol.trim()));
+    if (invalidMapping) {
+      setError(`Please specify a target ticker to map for ${invalidMapping.symbol}`);
       return;
     }
 
@@ -209,7 +327,7 @@ export const ExtractionReviewModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-      <div className="glass-panel w-full max-w-5xl rounded-2xl border dark:border-slate-800 border-slate-200 shadow-2xl p-6 relative max-h-[90vh] flex flex-col">
+      <div className="glass-panel w-full max-w-6xl rounded-2xl border dark:border-slate-800 border-slate-200 shadow-2xl p-6 relative max-h-[92vh] flex flex-col">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -220,7 +338,7 @@ export const ExtractionReviewModal = ({
         </button>
 
         {/* Modal Header */}
-        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2 mb-1">
               <div className="flex items-center space-x-2 text-amber-500 dark:text-amber-400 text-xs font-semibold uppercase tracking-wider">
@@ -230,12 +348,12 @@ export const ExtractionReviewModal = ({
               <TierBadge tier={tier} />
             </div>
             <h2 className="text-xl font-bold dark:text-white text-slate-900 font-heading">
-              {manualFallback ? 'Manual Entry — Extraction Failed' : 'Verify Extracted Holdings'}
+              {manualFallback ? 'Manual Entry — Extraction Failed' : 'Verify Extracted Holdings & Prices'}
             </h2>
             <p className="text-xs dark:text-slate-400 text-slate-500">
               {manualFallback
-                ? 'Auto-extraction couldn\'t parse the screenshot. Use the raw text below as reference and add holdings manually.'
-                : `AI extracted ${items.length} holding${items.length === 1 ? '' : 's'}. Assign chains and target wallet before confirming.`
+                ? "Auto-extraction couldn't parse the screenshot. Use the raw text below as reference and add holdings manually."
+                : `Extracted ${items.length} holding${items.length === 1 ? '' : 's'}. Review screenshot prices, resolve any live market mismatches, and assign target wallet.`
               }
             </p>
           </div>
@@ -260,6 +378,38 @@ export const ExtractionReviewModal = ({
           )}
         </div>
 
+        {/* Smart Price Mismatch Alert Banner */}
+        {hasMismatches && !manualFallback && (
+          <div className="mb-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 dark:bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start space-x-2.5 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block">Price Discrepancy Detected</span>
+                <p className="text-[11px] dark:text-slate-400 text-slate-600 mt-0.5">
+                  Some assets in your screenshot differ from online market quotes (common for wrapped, unlisted, or airdropped tokens). We defaulted to using your exact screenshot price to ensure accurate valuation.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={() => handleBulkSetStrategy('screenshot')}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-[11px] transition cursor-pointer border border-amber-500/30"
+              >
+                🔒 Lock All Screenshot Prices
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBulkSetStrategy('live')}
+                className="px-2.5 py-1.5 rounded-lg dark:bg-slate-800 bg-white hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-[11px] transition cursor-pointer border dark:border-slate-700 border-slate-300"
+              >
+                ⚡ Use All Live Quotes
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Manual Fallback: Raw OCR Text Block */}
         {manualFallback && rawText && (
           <div className="mb-4 space-y-2">
@@ -276,15 +426,15 @@ export const ExtractionReviewModal = ({
         )}
 
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-semibold">
+          <div className="mb-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-semibold">
             {error}
           </div>
         )}
 
         {/* Review Table */}
-        <div className="overflow-y-auto flex-1 my-2 border dark:border-slate-800 border-slate-200 rounded-xl dark:bg-slate-900/60 bg-white shadow-xs">
+        <div className="overflow-y-auto flex-1 my-1 border dark:border-slate-800 border-slate-200 rounded-xl dark:bg-slate-900/60 bg-white shadow-xs">
           <table className="w-full text-left text-xs dark:text-slate-300 text-slate-700">
-            <thead className="dark:bg-slate-900 bg-slate-100 sticky top-0 uppercase font-semibold dark:text-slate-400 text-slate-600 border-b dark:border-slate-800 border-slate-200 select-none">
+            <thead className="dark:bg-slate-900 bg-slate-100 sticky top-0 uppercase font-semibold dark:text-slate-400 text-slate-600 border-b dark:border-slate-800 border-slate-200 select-none z-10">
               <tr>
                 <th onClick={() => handleSort('assetType')} className="p-3 cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
                   <span>Type</span>
@@ -302,114 +452,201 @@ export const ExtractionReviewModal = ({
                   <span>Quantity</span>
                   {renderSortIndicator('quantity')}
                 </th>
-                <th onClick={() => handleSort('avgBuyPrice')} className="p-3 text-right cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
-                  <span>Avg Buy Price ($)</span>
-                  {renderSortIndicator('avgBuyPrice')}
+                <th onClick={() => handleSort('extractedPrice')} className="p-3 text-right cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
+                  <span>Screenshot Price</span>
+                  {renderSortIndicator('extractedPrice')}
+                </th>
+                <th className="p-3 text-right">
+                  <span>Live Market Price</span>
+                </th>
+                <th className="p-3">
+                  <span>Price Strategy</span>
                 </th>
                 <th onClick={() => handleSort('walletOrAccount')} className="p-3 cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
-                  <span>Tag / Account</span>
+                  <span>Wallet / Account</span>
                   {renderSortIndicator('walletOrAccount')}
                 </th>
                 <th className="p-3 text-center">Remove</th>
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-slate-800 divide-slate-200">
-              {sortedItems.map((item) => (
-                <tr key={item.tempId} className="dark:hover:bg-slate-800/50 hover:bg-slate-50 transition">
-                  {/* Asset Type Selector */}
-                  <td className="p-2">
-                    <select
-                      value={item.assetType}
-                      onChange={(e) => handleFieldChange(item.tempId, 'assetType', e.target.value)}
-                      className="glass-input rounded-lg px-2 py-1 text-xs dark:bg-slate-900 bg-white dark:border-slate-700 border-slate-300 dark:text-white text-slate-900"
-                    >
-                      <option value="crypto">Crypto</option>
-                      <option value="stock">Stock</option>
-                      <option value="cash">Cash</option>
-                    </select>
-                  </td>
+              {sortedItems.map((item) => {
+                const analysis = getItemPriceAnalysis(item);
+                const hasExtractedPrice = item.extractedPrice !== null && item.extractedPrice !== undefined;
 
-                  {/* Symbol */}
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      value={item.symbol}
-                      onChange={(e) => handleFieldChange(item.tempId, 'symbol', e.target.value)}
-                      placeholder="BTC"
-                      className="w-16 glass-input rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase text-cyan-600 dark:text-cyan-300"
-                    />
-                  </td>
+                return (
+                  <tr
+                    key={item.tempId}
+                    className={`transition ${
+                      analysis.isMismatch
+                        ? 'dark:bg-amber-500/5 bg-amber-50/50 hover:bg-amber-500/10'
+                        : 'dark:hover:bg-slate-800/50 hover:bg-slate-50'
+                    }`}
+                  >
+                    {/* Asset Type Selector */}
+                    <td className="p-2">
+                      <select
+                        value={item.assetType}
+                        onChange={(e) => handleFieldChange(item.tempId, 'assetType', e.target.value)}
+                        className="glass-input rounded-lg px-2 py-1 text-xs dark:bg-slate-900 bg-white dark:border-slate-700 border-slate-300 dark:text-white text-slate-900"
+                      >
+                        <option value="crypto">Crypto</option>
+                        <option value="stock">Stock</option>
+                        <option value="cash">Cash</option>
+                      </select>
+                    </td>
 
-                  {/* Chain / Network */}
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      value={item.chain || ''}
-                      onChange={(e) => handleFieldChange(item.tempId, 'chain', e.target.value)}
-                      placeholder="Arbitrum, Ethereum"
-                      className="w-28 glass-input rounded-lg px-2 py-1 text-xs"
-                    />
-                  </td>
+                    {/* Symbol */}
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={item.symbol}
+                        onChange={(e) => handleFieldChange(item.tempId, 'symbol', e.target.value)}
+                        placeholder="BTC"
+                        className="w-16 glass-input rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase text-cyan-600 dark:text-cyan-300"
+                      />
+                    </td>
 
-                  {/* Quantity */}
-                  <td className="p-2 text-right">
-                    <input
-                      type="number"
-                      step="any"
-                      value={item.quantity}
-                      onChange={(e) => handleFieldChange(item.tempId, 'quantity', e.target.value)}
-                      placeholder="0.00"
-                      className="w-20 glass-input rounded-lg px-2 py-1 text-xs font-mono text-right"
-                    />
-                  </td>
+                    {/* Chain / Network */}
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={item.chain || ''}
+                        onChange={(e) => handleFieldChange(item.tempId, 'chain', e.target.value)}
+                        placeholder="Arbitrum, Ethereum"
+                        className="w-24 glass-input rounded-lg px-2 py-1 text-xs"
+                      />
+                    </td>
 
-                  {/* Avg Buy Price (Stocks Only) */}
-                  <td className="p-2 text-right">
-                    {item.assetType === 'stock' ? (
+                    {/* Quantity */}
+                    <td className="p-2 text-right">
                       <input
                         type="number"
                         step="any"
-                        value={item.avgBuyPrice || ''}
-                        onChange={(e) => handleFieldChange(item.tempId, 'avgBuyPrice', e.target.value)}
+                        value={item.quantity}
+                        onChange={(e) => handleFieldChange(item.tempId, 'quantity', e.target.value)}
                         placeholder="0.00"
                         className="w-20 glass-input rounded-lg px-2 py-1 text-xs font-mono text-right"
                       />
-                    ) : (
-                      <span className="text-[11px] dark:text-slate-500 text-slate-400 italic">
-                        {item.assetType === 'crypto' ? 'Market / Live' : '—'}
-                      </span>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Wallet / Account */}
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      value={item.walletOrAccount || ''}
-                      onChange={(e) => handleFieldChange(item.tempId, 'walletOrAccount', e.target.value)}
-                      placeholder="Binance"
-                      className="w-24 glass-input rounded-lg px-2 py-1 text-xs"
-                    />
-                  </td>
+                    {/* Extracted Screenshot Price & Total */}
+                    <td className="p-2 text-right font-mono">
+                      {hasExtractedPrice ? (
+                        <div>
+                          <span className="font-bold dark:text-slate-200 text-slate-800 block">
+                            {formatUSD(item.extractedPrice)}
+                          </span>
+                          {item.totalValue ? (
+                            <span className="text-[10px] text-slate-400 block">
+                              Total: {formatUSD(item.totalValue)}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">—</span>
+                      )}
+                    </td>
 
-                  {/* Remove Button */}
-                  <td className="p-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRow(item.tempId)}
-                      className="p-1 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    {/* Live Market Price from API */}
+                    <td className="p-2 text-right font-mono">
+                      {item.assetType === 'cash' ? (
+                        <span className="dark:text-slate-300 text-slate-700 font-semibold">$1.00</span>
+                      ) : (
+                        <div>
+                          <span className="dark:text-slate-300 text-slate-700 font-semibold block">
+                            {analysis.livePrice > 0 ? formatUSD(analysis.livePrice) : <span className="text-amber-500 text-[11px]">Unlisted ($0)</span>}
+                          </span>
+                          {analysis.isMismatch && hasExtractedPrice && (
+                            <span className="text-[10px] font-bold text-amber-500 block">
+                              {analysis.isUnlisted ? '⚠️ Unlisted' : `⚠️ ${analysis.diffPct.toFixed(0)}% diff`}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Price Strategy Selector & Inline Configuration */}
+                    <td className="p-2">
+                      <div className="flex flex-col gap-1">
+                        <select
+                          value={item.priceAction || 'live'}
+                          onChange={(e) => handleFieldChange(item.tempId, 'priceAction', e.target.value)}
+                          className="glass-input rounded-lg px-2 py-1 text-xs dark:bg-slate-900 bg-white dark:border-slate-700 border-slate-300 font-medium"
+                        >
+                          {hasExtractedPrice && (
+                            <option value="screenshot">
+                              🔒 Use Screenshot Price ({formatUSD(item.extractedPrice)})
+                            </option>
+                          )}
+                          <option value="live">
+                            ⚡ Use Live Market Quote ({analysis.livePrice > 0 ? formatUSD(analysis.livePrice) : 'Auto'})
+                          </option>
+                          <option value="mapped">🔗 Map to Ticker (e.g. ETH, BTC)</option>
+                          <option value="custom">✍️ Custom Fixed Price</option>
+                        </select>
+
+                        {/* Inline Ticker Mapping Input */}
+                        {item.priceAction === 'mapped' && (
+                          <div className="flex items-center space-x-1 mt-0.5">
+                            <span className="text-[10px] text-slate-400">Map to:</span>
+                            <input
+                              type="text"
+                              value={item.mappedSymbol || ''}
+                              onChange={(e) => handleFieldChange(item.tempId, 'mappedSymbol', e.target.value.toUpperCase())}
+                              placeholder="ETH, BTC, SOL"
+                              className="w-20 px-1.5 py-0.5 rounded text-xs uppercase font-mono font-bold border border-indigo-500/50 dark:bg-slate-950 bg-white text-indigo-600 dark:text-indigo-400"
+                            />
+                          </div>
+                        )}
+
+                        {/* Inline Custom Price Input */}
+                        {item.priceAction === 'custom' && (
+                          <div className="flex items-center space-x-1 mt-0.5">
+                            <span className="text-[10px] text-slate-400">$</span>
+                            <input
+                              type="number"
+                              step="any"
+                              value={item.customPrice !== undefined ? item.customPrice : ''}
+                              onChange={(e) => handleFieldChange(item.tempId, 'customPrice', e.target.value)}
+                              placeholder="0.00"
+                              className="w-20 px-1.5 py-0.5 rounded text-xs font-mono border border-cyan-500/50 dark:bg-slate-950 bg-white text-cyan-600 dark:text-cyan-400"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Wallet / Account */}
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={item.walletOrAccount || ''}
+                        onChange={(e) => handleFieldChange(item.tempId, 'walletOrAccount', e.target.value)}
+                        placeholder="Binance"
+                        className="w-20 glass-input rounded-lg px-2 py-1 text-xs"
+                      />
+                    </td>
+
+                    {/* Remove Button */}
+                    <td className="p-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRow(item.tempId)}
+                        className="p-1 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         {/* Modal Controls */}
-        <div className="pt-4 border-t dark:border-slate-800 border-slate-200 flex items-center justify-between">
+        <div className="pt-3 border-t dark:border-slate-800 border-slate-200 flex items-center justify-between">
           <button
             type="button"
             onClick={handleAddEmptyRow}

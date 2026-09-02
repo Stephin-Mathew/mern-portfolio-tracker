@@ -56,7 +56,9 @@ STRICT RULES:
   {
     "symbol": "BTC",
     "quantity": 0.045,
-    "avgBuyPrice": 61234.50,
+    "extractedPrice": 61234.50,
+    "totalValue": 2755.55,
+    "avgBuyPrice": null,
     "assetType": "crypto",
     "walletOrAccount": "Binance"
   }
@@ -64,8 +66,10 @@ STRICT RULES:
 4. "assetType" must be one of: "crypto", "stock", "cash".
 5. "symbol" must be the uppercase ticker symbol (e.g. BTC, ETH, AAPL).
 6. "quantity" must be a clean number (e.g. 0.045, not "0.045 BTC").
-7. "avgBuyPrice" should only be included for stocks if visible (otherwise 0). For crypto/cash set to null.
-8. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
+7. "extractedPrice" is the unit price/rate shown on the screenshot for this asset (e.g. 61234.50). If not directly visible but total value and quantity are shown, calculate totalValue / quantity. If neither is available, set to null.
+8. "totalValue" is the total fiat/USD valuation of this holding visible in the screenshot (e.g. 2755.55). If not shown, set to null.
+9. "avgBuyPrice" should only be included for stocks if visible (otherwise 0). For crypto/cash set to null.
+10. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
 };
 
 /**

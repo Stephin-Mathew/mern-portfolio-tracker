@@ -1,5 +1,6 @@
 import express from 'express';
 import { Holding } from '../models/Holding.js';
+import { PriceOverride } from '../models/PriceOverride.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -70,6 +71,42 @@ router.post('/batch', async (req, res) => {
 
     if (!Array.isArray(holdings) || holdings.length === 0) {
       return res.status(400).json({ message: 'Holdings array is required' });
+    }
+
+    // Persist any price overrides or ticker mappings selected during review
+    for (const item of holdings) {
+      const sym = (item.symbol || '').trim().toUpperCase();
+      if (!sym) continue;
+
+      if (item.priceAction === 'mapped' && item.mappedSymbol) {
+        await PriceOverride.findOneAndUpdate(
+          { userId: req.user._id, symbol: sym },
+          {
+            price: null,
+            mappedSymbol: item.mappedSymbol.trim().toUpperCase(),
+            isLocked: true,
+            notes: 'Mapped during screenshot extraction review',
+          },
+          { upsert: true, new: true }
+        );
+      } else if (
+        (item.priceAction === 'screenshot' && item.extractedPrice !== undefined && item.extractedPrice !== null) ||
+        (item.priceAction === 'custom' && item.customPrice !== undefined && item.customPrice !== null)
+      ) {
+        const targetPrice = item.priceAction === 'custom' ? Number(item.customPrice) : Number(item.extractedPrice);
+        if (!isNaN(targetPrice) && targetPrice >= 0) {
+          await PriceOverride.findOneAndUpdate(
+            { userId: req.user._id, symbol: sym },
+            {
+              price: targetPrice,
+              mappedSymbol: null,
+              isLocked: true,
+              notes: 'Locked to screenshot price during extraction review',
+            },
+            { upsert: true, new: true }
+          );
+        }
+      }
     }
 
     const newHoldingsData = holdings.map((item) => {

@@ -32,7 +32,9 @@ STRICT RULES:
   {
     "symbol": "BTC",
     "quantity": 0.045,
-    "avgBuyPrice": 61234.50,
+    "extractedPrice": 61234.50,
+    "totalValue": 2755.55,
+    "avgBuyPrice": null,
     "assetType": "crypto",
     "walletOrAccount": "Binance"
   }
@@ -40,10 +42,12 @@ STRICT RULES:
 3. "assetType" must be one of: "crypto", "stock", "cash".
 4. "symbol" must be the uppercase ticker symbol (e.g. BTC, ETH, AAPL).
 5. "quantity" must be a number (e.g. 0.045), not a string.
-6. "avgBuyPrice" is ONLY for stocks if visible (otherwise 0). For crypto/cash set to null.
-7. "walletOrAccount" should be the exchange/wallet name if identifiable from the text, otherwise "Unknown".
-8. Skip any rows that are clearly totals, UI elements, or have zero/unknown quantity.
-9. If the OCR text is messy, do your best to extract meaningful holdings. Prefer partial correct data over returning nothing.`;
+6. "extractedPrice" is the unit price / rate shown on the screenshot for this asset (e.g. 61234.50). If not directly shown but total value and quantity are visible, compute totalValue / quantity. If neither is visible, set to null.
+7. "totalValue" is the total fiat/USD valuation of this holding visible in the screenshot. If not visible, set to null.
+8. "avgBuyPrice" is ONLY for stocks if visible (otherwise 0). For crypto/cash set to null.
+9. "walletOrAccount" should be the exchange/wallet name if identifiable from the text, otherwise "Unknown".
+10. Skip any rows that are clearly totals, UI elements, or have zero/unknown quantity.
+11. If the OCR text is messy, do your best to extract meaningful holdings. Prefer partial correct data over returning nothing.`;
 
   const groq = new Groq({ apiKey });
 

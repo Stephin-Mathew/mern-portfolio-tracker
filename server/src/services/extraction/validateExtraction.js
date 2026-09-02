@@ -59,9 +59,34 @@ export const validateExtractionResult = (data) => {
       avgBuyPrice = isNaN(rawPrice) || rawPrice < 0 ? 0 : rawPrice;
     }
 
+    // --- extractedPrice & totalValue from screenshot ---
+    let extractedPrice = null;
+    if (item.extractedPrice !== undefined && item.extractedPrice !== null && item.extractedPrice !== '') {
+      const ep = Number(item.extractedPrice);
+      if (!isNaN(ep) && ep >= 0) extractedPrice = ep;
+    }
+
+    let totalValue = null;
+    if (item.totalValue !== undefined && item.totalValue !== null && item.totalValue !== '') {
+      const tv = Number(item.totalValue);
+      if (!isNaN(tv) && tv >= 0) totalValue = tv;
+    }
+
+    // If unit price missing but totalValue and quantity exist: calculate unit price
+    if (extractedPrice === null && totalValue !== null && quantity > 0) {
+      extractedPrice = Number((totalValue / quantity).toFixed(6));
+    }
+
+    // If totalValue missing but unit price and quantity exist: calculate total value
+    if (totalValue === null && extractedPrice !== null && quantity > 0) {
+      totalValue = Number((extractedPrice * quantity).toFixed(2));
+    }
+
     normalizedItems.push({
       symbol,
       quantity,
+      extractedPrice,
+      totalValue,
       avgBuyPrice,
       assetType,
       walletOrAccount: item.walletOrAccount ? String(item.walletOrAccount).trim() : 'AI Extraction',
