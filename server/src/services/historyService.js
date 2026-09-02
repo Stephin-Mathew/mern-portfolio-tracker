@@ -13,7 +13,7 @@ export const captureUserSnapshot = async (userId) => {
     }
 
     const symbols = [...new Set(holdings.map((h) => h.symbol))];
-    const prices = await getPricesForSymbols(symbols);
+    const prices = await getPricesForSymbols(symbols, userId);
 
     let totalValue = 0;
     let totalCost = 0;
@@ -87,8 +87,25 @@ const generateHistoricalDataPoints = (targetValue, targetCost, cryptoVal, stockV
   const now = Date.now();
   const intervalMs = (days * 24 * 60 * 60 * 1000) / (pointCount - 1);
 
+  // If targetValue is 0 (empty portfolio), return flat 0 points
+  if (targetValue <= 0) {
+    for (let i = pointCount - 1; i >= 0; i--) {
+      const timestamp = new Date(now - i * intervalMs);
+      points.push({
+        timestamp,
+        totalValue: 0,
+        totalCost: 0,
+        totalPnL: 0,
+        cryptoValue: 0,
+        stockValue: 0,
+        cashValue: 0,
+      });
+    }
+    return points;
+  }
+
   // Deterministic seed waveform generation
-  const baseValue = targetValue > 0 ? targetValue : 10000;
+  const baseValue = targetValue;
   const baseCost = targetCost > 0 ? targetCost : baseValue * 0.82;
 
   // Trend volatility multiplier based on timeframe
@@ -168,7 +185,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
   // Calculate current actual portfolio total
   const holdings = await Holding.find({ userId });
   const symbols = [...new Set(holdings.map((h) => h.symbol))];
-  const prices = await getPricesForSymbols(symbols);
+  const prices = await getPricesForSymbols(symbols, userId);
 
   let currentVal = 0;
   let currentCost = 0;
@@ -249,4 +266,18 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
       totalPnL: Number((currentVal - currentCost).toFixed(2)),
     },
   };
+};
+
+/**
+ * Clear all portfolio history snapshots for a user.
+ * Useful when test data has been removed and old snapshots show stale values
+ * (e.g. chart shows -100% because old snapshots recorded a high value but current is $0).
+ *
+ * @param {ObjectId} userId
+ * @returns {Promise<{deletedCount: number}>}
+ */
+export const clearPortfolioHistory = async (userId) => {
+  const result = await PortfolioSnapshot.deleteMany({ userId });
+  console.log(`[history] 🗑️ Cleared ${result.deletedCount} portfolio snapshot(s) for user ${userId}`);
+  return { deletedCount: result.deletedCount };
 };

@@ -15,41 +15,56 @@ router.use(authenticateToken);
  */
 router.get('/', async (req, res) => {
   try {
-    const wallets = await Wallet.find({ userId: req.user._id }).sort({ createdAt: -1 }).lean();
-    const holdings = await Holding.find({ userId: req.user._id }).lean();
+    // Fetch wallets and compute per-wallet stats using MongoDB aggregation
+    // This is much faster than fetching all holdings and filtering in JS
+    const [wallets, holdingStats] = await Promise.all([
+      Wallet.find({ userId: req.user._id }).sort({ createdAt: -1 }).lean(),
+      Holding.aggregate([
+        { $match: { userId: req.user._id } },
+        {
+          $group: {
+            _id: '$walletId',
+            holdingCount: { $sum: 1 },
+            cryptoCount: {
+              $sum: { $cond: [{ $eq: ['$assetType', 'crypto'] }, 1, 0] },
+            },
+            stockCount: {
+              $sum: { $cond: [{ $eq: ['$assetType', 'stock'] }, 1, 0] },
+            },
+            cashCount: {
+              $sum: { $cond: [{ $eq: ['$assetType', 'cash'] }, 1, 0] },
+            },
+          },
+        },
+      ]),
+    ]);
 
-    // Map stats onto each wallet
+    // Build a lookup map from the aggregation results
+    const statsMap = {};
+    let unassignedCount = 0;
+    holdingStats.forEach((stat) => {
+      if (stat._id === null) {
+        unassignedCount = stat.holdingCount;
+      } else {
+        statsMap[stat._id.toString()] = stat;
+      }
+    });
+
+    // Enrich wallets with stats
     const enrichedWallets = wallets.map((wallet) => {
-      const walletHoldings = holdings.filter(
-        (h) => h.walletId && h.walletId.toString() === wallet._id.toString()
-      );
-      
-      const holdingCount = walletHoldings.length;
-      let cryptoCount = 0;
-      let stockCount = 0;
-      let cashCount = 0;
-
-      walletHoldings.forEach((h) => {
-        if (h.assetType === 'crypto') cryptoCount++;
-        else if (h.assetType === 'stock') stockCount++;
-        else if (h.assetType === 'cash') cashCount++;
-      });
-
+      const stat = statsMap[wallet._id.toString()] || {};
       return {
         ...wallet,
-        holdingCount,
-        cryptoCount,
-        stockCount,
-        cashCount,
+        holdingCount: stat.holdingCount || 0,
+        cryptoCount: stat.cryptoCount || 0,
+        stockCount: stat.stockCount || 0,
+        cashCount: stat.cashCount || 0,
       };
     });
 
-    // Also count unassigned holdings
-    const unassignedHoldings = holdings.filter((h) => !h.walletId);
-
     res.json({
       wallets: enrichedWallets,
-      unassignedCount: unassignedHoldings.length,
+      unassignedCount,
     });
   } catch (error) {
     console.error('Fetch Wallets Error:', error);
@@ -157,7 +172,7 @@ router.patch('/:id', async (req, res) => {
 
 /**
  * @route   DELETE /api/wallets/:id
- * @desc    Delete a wallet and unlink its holdings
+ * @desc    Delete a wallet and all its associated holdings
  * @access  Private
  */
 router.delete('/:id', async (req, res) => {
@@ -169,13 +184,17 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Wallet not found or unauthorized' });
     }
 
-    // Unlink holdings associated with this wallet (set walletId to null)
-    await Holding.updateMany(
-      { userId: req.user._id, walletId: id },
-      { $set: { walletId: null } }
-    );
+    // Delete all holdings associated with this wallet
+    const deleteResult = await Holding.deleteMany({
+      userId: req.user._id,
+      walletId: id,
+    });
 
-    res.json({ message: 'Wallet deleted successfully', id });
+    res.json({
+      message: 'Wallet and all associated assets deleted successfully',
+      id,
+      deletedCount: deleteResult.deletedCount,
+    });
   } catch (error) {
     console.error('Delete Wallet Error:', error);
     res.status(500).json({ message: 'Failed to delete wallet' });

@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { clerkMiddleware } from '@clerk/express';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/auth.js';
@@ -11,8 +11,6 @@ import portfolioRoutes from './routes/portfolio.js';
 import extractRoutes from './routes/extract.js';
 import { initPriceCron } from './services/priceService.js';
 
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -22,7 +20,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Clerk Auth middleware (populates req.auth with session/user info)
-app.use(clerkMiddleware());
+// clockSkewInMs: 60000 provides leeway for slight clock drift between client/server and Clerk auth servers
+app.use(clerkMiddleware({ clockSkewInMs: 60000 }));
 
 // API Routes
 app.use('/api/auth', authRoutes);

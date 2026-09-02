@@ -60,4 +60,9 @@ const holdingSchema = new mongoose.Schema(
   }
 );
 
+// Compound indexes for common query patterns on remote MongoDB Atlas
+// These prevent full collection scans and significantly reduce query latency
+holdingSchema.index({ userId: 1, walletId: 1 });
+holdingSchema.index({ userId: 1, symbol: 1 });
+
 export const Holding = mongoose.model('Holding', holdingSchema);

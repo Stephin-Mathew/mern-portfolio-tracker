@@ -1,6 +1,7 @@
 import axios from 'axios';
 import cron from 'node-cron';
 import { PriceCache } from '../models/PriceCache.js';
+import { PriceOverride } from '../models/PriceOverride.js';
 
 // Standard baseline market quotes with 24h/7d/30d change percentages for mock fallback
 const FALLBACK_PRICES = {
@@ -38,41 +39,130 @@ const FALLBACK_PRICES = {
 
 /**
  * Get cached or live price object for requested symbols array
- * Returns: { [symbol]: { price: number, change24h: number, change7d: number, change30d: number } }
+ * Returns: { [symbol]: { price: number, change24h: number, change7d: number, change30d: number, isCustom?: boolean, isLocked?: boolean, mappedSymbol?: string } }
  */
-export const getPricesForSymbols = async (symbols = []) => {
+const PRICE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes staleness threshold
+
+export const getPricesForSymbols = async (symbols = [], userId = null) => {
   if (!symbols.length) return {};
 
   const cleanSymbols = [...new Set(symbols.map((s) => s.toUpperCase()))];
   const priceMap = {};
+  const staleSymbols = [];
+
+  // Check user-specific overrides if userId is provided
+  const overrideMap = new Map();
+  const mappedSymbolsToQuery = [];
+
+  if (userId) {
+    try {
+      const userOverrides = await PriceOverride.find({ userId, symbol: { $in: cleanSymbols } });
+      userOverrides.forEach((ov) => {
+        overrideMap.set(ov.symbol, ov);
+        if (ov.mappedSymbol) {
+          mappedSymbolsToQuery.push(ov.mappedSymbol.toUpperCase());
+        }
+      });
+    } catch (err) {
+      console.warn('Error fetching price overrides:', err.message);
+    }
+  }
+
+  // All symbols needed from cache/network (original symbols + mapped target symbols)
+  const allSymbolsToQuery = [...new Set([...cleanSymbols, ...mappedSymbolsToQuery])];
 
   // Check database price cache
-  const cachedEntries = await PriceCache.find({ symbol: { $in: cleanSymbols } });
+  const cachedEntries = await PriceCache.find({ symbol: { $in: allSymbolsToQuery } });
+  const now = Date.now();
   cachedEntries.forEach((entry) => {
-    priceMap[entry.symbol] = {
-      price: entry.price,
-      change24h: entry.change24h || 0,
-      change7d: entry.change7d || 0,
-      change30d: entry.change30d || 0,
-    };
+    const age = now - (entry.lastUpdated ? new Date(entry.lastUpdated).getTime() : 0);
+    if (age > PRICE_CACHE_TTL_MS) {
+      // Entry exists but is stale — use it as a fallback but mark for refresh
+      priceMap[entry.symbol] = {
+        price: entry.price,
+        change24h: entry.change24h || 0,
+        change7d: entry.change7d || 0,
+        change30d: entry.change30d || 0,
+      };
+      // Only mark for refresh if not a locked custom price
+      const ov = overrideMap.get(entry.symbol);
+      if (!ov || !ov.isLocked) {
+        staleSymbols.push(entry.symbol);
+      }
+    } else {
+      priceMap[entry.symbol] = {
+        price: entry.price,
+        change24h: entry.change24h || 0,
+        change7d: entry.change7d || 0,
+        change30d: entry.change30d || 0,
+      };
+    }
   });
 
-  // Identify symbols missing from cache or stale
-  const missingSymbols = cleanSymbols.filter((sym) => {
+  // Identify symbols missing from cache
+  const missingSymbols = allSymbolsToQuery.filter((sym) => {
     if (sym === 'USD' || sym === 'USDT' || sym === 'USDC') {
       priceMap[sym] = { price: 1.0, change24h: 0, change7d: 0, change30d: 0 };
+      return false;
+    }
+    // If it has a fixed custom price override (not mapped), we don't need to query CMC
+    const ov = overrideMap.get(sym);
+    if (ov && !ov.mappedSymbol && ov.price !== null && ov.price !== undefined) {
       return false;
     }
     return !priceMap[sym];
   });
 
-  if (missingSymbols.length > 0) {
-    console.log(`🔍 Fetching live quotes for missing symbols: ${missingSymbols.join(', ')}`);
-    const fetched = await fetchAndCachePrices(missingSymbols);
+  // Combine missing + stale symbols that need refreshing
+  const symbolsToRefresh = [...new Set([...missingSymbols, ...staleSymbols])];
+
+  if (symbolsToRefresh.length > 0) {
+    console.log(`🔍 Fetching live quotes for ${symbolsToRefresh.length} symbols (${missingSymbols.length} missing, ${staleSymbols.length} stale)`);
+    const fetched = await fetchAndCachePrices(symbolsToRefresh);
     Object.assign(priceMap, fetched);
   }
 
-  return priceMap;
+  // Apply user overrides and mappings to final output
+  const finalPriceMap = {};
+
+  cleanSymbols.forEach((sym) => {
+    const ov = overrideMap.get(sym);
+
+    if (ov) {
+      if (ov.mappedSymbol) {
+        // Ticker mapping: inherit mapped symbol's price & change stats
+        const mappedTarget = ov.mappedSymbol.toUpperCase();
+        const targetQuote = priceMap[mappedTarget] || { price: 0, change24h: 0, change7d: 0, change30d: 0 };
+        finalPriceMap[sym] = {
+          price: Number(targetQuote.price || 0),
+          change24h: Number(targetQuote.change24h || 0),
+          change7d: Number(targetQuote.change7d || 0),
+          change30d: Number(targetQuote.change30d || 0),
+          isCustom: true,
+          isLocked: !!ov.isLocked,
+          mappedSymbol: mappedTarget,
+        };
+      } else if (ov.price !== null && ov.price !== undefined) {
+        // Fixed custom price
+        const baseQuote = priceMap[sym] || {};
+        finalPriceMap[sym] = {
+          price: Number(ov.price),
+          change24h: Number(baseQuote.change24h || 0),
+          change7d: Number(baseQuote.change7d || 0),
+          change30d: Number(baseQuote.change30d || 0),
+          isCustom: true,
+          isLocked: !!ov.isLocked,
+          mappedSymbol: null,
+        };
+      } else {
+        finalPriceMap[sym] = priceMap[sym] || { price: 0, change24h: 0, change7d: 0, change30d: 0 };
+      }
+    } else {
+      finalPriceMap[sym] = priceMap[sym] || { price: 0, change24h: 0, change7d: 0, change30d: 0 };
+    }
+  });
+
+  return finalPriceMap;
 };
 
 /**
@@ -132,23 +222,27 @@ export const fetchAndCachePrices = async (symbols = []) => {
         change30d: Number(fallbackEntry.change30d || 0),
       };
     }
-
-    // Update MongoDB PriceCache
-    await PriceCache.findOneAndUpdate(
-      { symbol: sym },
-      {
-        price: result[sym].price,
-        change24h: result[sym].change24h,
-        change7d: result[sym].change7d,
-        change30d: result[sym].change30d,
-        assetType: ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ'].includes(sym)
-          ? 'stock'
-          : 'crypto',
-        lastUpdated: new Date(),
-      },
-      { upsert: true, new: true }
-    );
   }
+
+  // Update MongoDB PriceCache in parallel
+  await Promise.all(
+    symbols.map((sym) =>
+      PriceCache.findOneAndUpdate(
+        { symbol: sym },
+        {
+          price: result[sym].price,
+          change24h: result[sym].change24h,
+          change7d: result[sym].change7d,
+          change30d: result[sym].change30d,
+          assetType: ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ'].includes(sym)
+            ? 'stock'
+            : 'crypto',
+          lastUpdated: new Date(),
+        },
+        { upsert: true, new: true }
+      )
+    )
+  );
 
   return result;
 };

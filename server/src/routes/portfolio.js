@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
-import { getPortfolioHistory, captureUserSnapshot } from '../services/historyService.js';
+import { getPortfolioHistory, captureUserSnapshot, clearPortfolioHistory } from '../services/historyService.js';
 
 const router = express.Router();
 
@@ -34,6 +34,25 @@ router.post('/snapshot', async (req, res) => {
   } catch (error) {
     console.error('Capture Snapshot Error:', error);
     res.status(500).json({ message: 'Failed to record portfolio snapshot' });
+  }
+});
+
+/**
+ * @route   DELETE /api/portfolio/history
+ * @desc    Delete all portfolio history snapshots for the current user.
+ *          Useful when test data has been removed and old snapshots show stale values.
+ * @access  Private
+ */
+router.delete('/history', async (req, res) => {
+  try {
+    const result = await clearPortfolioHistory(req.user._id);
+    res.json({
+      message: 'Portfolio history cleared successfully',
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error('Clear Portfolio History Error:', error);
+    res.status(500).json({ message: 'Failed to clear portfolio history' });
   }
 });
 

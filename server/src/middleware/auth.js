@@ -10,6 +10,10 @@ import { User } from '../models/User.js';
  * 3. Falls back to legacy JWT token if provided
  * 4. Attaches the database user object to req.user
  */
+const userCache = new Map();
+const inFlightUserFetches = new Map();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes in-memory cache
+
 export const authenticateToken = async (req, res, next) => {
   try {
     const auth = getAuth(req);
@@ -17,49 +21,69 @@ export const authenticateToken = async (req, res, next) => {
     if (auth && auth.userId) {
       const clerkId = auth.userId;
       
-      // Look up existing user by clerkId
-      let user = await User.findOne({ clerkId });
-      
-      if (!user) {
-        let email = '';
-        let firstName = '';
-        let lastName = '';
-        let imageUrl = '';
-        
-        try {
-          const clerkUser = await clerkClient.users.getUser(clerkId);
-          email = clerkUser?.emailAddresses?.[0]?.emailAddress || '';
-          firstName = clerkUser?.firstName || '';
-          lastName = clerkUser?.lastName || '';
-          imageUrl = clerkUser?.imageUrl || '';
-        } catch (err) {
-          console.warn('Could not fetch user details from Clerk API:', err.message);
-        }
-        
-        // If user not found by clerkId, check if an existing user has the same email
-        if (email) {
-          user = await User.findOne({ email: email.toLowerCase() });
-        }
-
-        if (user) {
-          // Link existing account with Clerk ID and update profile info if needed
-          user.clerkId = clerkId;
-          if (firstName && !user.firstName) user.firstName = firstName;
-          if (lastName && !user.lastName) user.lastName = lastName;
-          if (imageUrl && !user.imageUrl) user.imageUrl = imageUrl;
-          await user.save();
-        } else {
-          // Create new user record
-          user = await User.create({
-            clerkId,
-            ...(email ? { email: email.toLowerCase() } : {}),
-            firstName,
-            lastName,
-            imageUrl,
-          });
-        }
+      // Fast path: Check in-memory user cache
+      const cached = userCache.get(clerkId);
+      if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+        req.user = cached.user;
+        req.clerkAuth = auth;
+        return next();
       }
-      
+
+      // Deduplicate concurrent user lookups/creations for the same clerkId
+      let userPromise = inFlightUserFetches.get(clerkId);
+      if (!userPromise) {
+        userPromise = (async () => {
+          let user = await User.findOne({ clerkId });
+          
+          if (!user) {
+            let email = '';
+            let firstName = '';
+            let lastName = '';
+            let imageUrl = '';
+            
+            try {
+              const clerkUser = await clerkClient.users.getUser(clerkId);
+              email = clerkUser?.emailAddresses?.[0]?.emailAddress || '';
+              firstName = clerkUser?.firstName || '';
+              lastName = clerkUser?.lastName || '';
+              imageUrl = clerkUser?.imageUrl || '';
+            } catch (err) {
+              console.warn('Could not fetch user details from Clerk API:', err.message);
+            }
+            
+            // If user not found by clerkId, check if an existing user has the same email
+            if (email) {
+              user = await User.findOne({ email: email.toLowerCase() });
+            }
+
+            if (user) {
+              user.clerkId = clerkId;
+              if (firstName && !user.firstName) user.firstName = firstName;
+              if (lastName && !user.lastName) user.lastName = lastName;
+              if (imageUrl && !user.imageUrl) user.imageUrl = imageUrl;
+              await user.save();
+            } else {
+              user = await User.create({
+                clerkId,
+                ...(email ? { email: email.toLowerCase() } : {}),
+                firstName,
+                lastName,
+                imageUrl,
+              });
+            }
+          }
+          return user;
+        })();
+
+        inFlightUserFetches.set(clerkId, userPromise);
+      }
+
+      const user = await userPromise;
+      inFlightUserFetches.delete(clerkId);
+
+      // Store in memory cache
+      userCache.set(clerkId, { user, cachedAt: Date.now() });
+
       req.user = user;
       req.clerkAuth = auth;
       return next();
