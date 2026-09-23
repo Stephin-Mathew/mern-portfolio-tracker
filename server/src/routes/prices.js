@@ -8,6 +8,8 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
+const BENCHMARK_SYMBOLS = ['BTC', 'HYPE', 'INR', 'USD'];
+
 /**
  * @route   GET /api/prices
  * @desc    Get cached prices for user's portfolio symbols or passed query symbols (with user overrides applied)
@@ -24,7 +26,9 @@ router.get('/', async (req, res) => {
       symbols = await Holding.distinct('symbol', { userId: req.user._id });
     }
 
-    const priceMap = await getPricesForSymbols(symbols, req.user._id);
+    // Always include conversion benchmarks so client can convert to BTC, HYPE, INR, etc.
+    const symbolsToQuery = [...new Set([...symbols, ...BENCHMARK_SYMBOLS])];
+    const priceMap = await getPricesForSymbols(symbolsToQuery, req.user._id);
     res.json({ prices: priceMap });
   } catch (error) {
     console.error('Fetch Prices Error:', error);
@@ -40,7 +44,7 @@ router.get('/', async (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     const userHoldings = await Holding.find({ userId: req.user._id }).select('symbol');
-    const symbols = [...new Set(userHoldings.map((h) => h.symbol))];
+    const symbols = [...new Set([...userHoldings.map((h) => h.symbol), ...BENCHMARK_SYMBOLS])];
 
     await fetchAndCachePrices(symbols);
     const refreshedPriceMap = await getPricesForSymbols(symbols, req.user._id);

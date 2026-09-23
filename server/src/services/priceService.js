@@ -66,6 +66,7 @@ const FALLBACK_PRICES = {
   USD: { price: 1.0, change24h: 0, change7d: 0, change30d: 0 },
   USDT: { price: 1.0, change24h: 0.01, change7d: 0.02, change30d: 0.01 },
   USDC: { price: 1.0, change24h: 0.0, change7d: 0.01, change30d: 0.0 },
+  INR: { price: 95.7, rate: 95.7, change24h: 0, change7d: 0, change30d: 0 },
   // Hyperliquid ecosystem
   HYPE: { price: 95.0, change24h: 2.0, change7d: 8.5, change30d: 45.0 },
   WHYPE: { price: 95.0, change24h: 2.0, change7d: 8.5, change30d: 45.0 },
@@ -77,6 +78,45 @@ const FALLBACK_PRICES = {
   OM: { price: 0.65, change24h: 1.1, change7d: 3.4, change30d: 8.0 },
   ZRO: { price: 3.2, change24h: 1.8, change7d: 6.0, change30d: 14.0 },
   HPOS10I: { price: 0.0, change24h: 0, change7d: 0, change30d: 0 },
+};
+
+let inrCache = {
+  rate: 95.7,
+  lastUpdated: 0,
+};
+
+/**
+ * Fetch live USD to INR exchange rate with multi-source fallback
+ */
+export const fetchLiveInrRate = async () => {
+  const now = Date.now();
+  if (now - inrCache.lastUpdated < 15 * 60 * 1000 && inrCache.rate > 0) {
+    return inrCache.rate;
+  }
+  try {
+    const res = await axios.get('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
+    if (res.data?.rates?.INR) {
+      inrCache = {
+        rate: Number(res.data.rates.INR),
+        lastUpdated: now,
+      };
+      return inrCache.rate;
+    }
+  } catch (err1) {
+    try {
+      const res2 = await axios.get('https://api.frankfurter.app/latest?from=USD&to=INR', { timeout: 5000 });
+      if (res2.data?.rates?.INR) {
+        inrCache = {
+          rate: Number(res2.data.rates.INR),
+          lastUpdated: now,
+        };
+        return inrCache.rate;
+      }
+    } catch (err2) {
+      console.warn('Failed to fetch live INR rate from open feeds, using baseline:', err2.message);
+    }
+  }
+  return inrCache.rate || 95.7;
 };
 
 /**
@@ -143,8 +183,10 @@ export const getPricesForSymbols = async (symbols = [], userId = null) => {
 
   // Identify symbols missing from cache
   const missingSymbols = allSymbolsToQuery.filter((sym) => {
-    if (sym === 'USD' || sym === 'USDT' || sym === 'USDC') {
-      priceMap[sym] = { price: 1.0, change24h: 0, change7d: 0, change30d: 0 };
+    if (sym === 'USD' || sym === 'USDT' || sym === 'USDC' || sym === 'INR') {
+      if (sym === 'USD' || sym === 'USDT' || sym === 'USDC') {
+        priceMap[sym] = { price: 1.0, change24h: 0, change7d: 0, change30d: 0 };
+      }
       return false;
     }
     // If it has a fixed custom price override (not mapped), we don't need to query CMC
@@ -154,6 +196,19 @@ export const getPricesForSymbols = async (symbols = [], userId = null) => {
     }
     return !priceMap[sym];
   });
+
+  // Always populate live INR rate if queried
+  if (allSymbolsToQuery.includes('INR') || cleanSymbols.includes('INR')) {
+    const liveInr = await fetchLiveInrRate();
+    priceMap['INR'] = {
+      price: liveInr,
+      rate: liveInr,
+      inrPerUsd: liveInr,
+      change24h: 0,
+      change7d: 0,
+      change30d: 0,
+    };
+  }
 
   // Combine missing + stale symbols that need refreshing
   const symbolsToRefresh = [...new Set([...missingSymbols, ...staleSymbols])];
@@ -300,11 +355,24 @@ export const fetchAndCachePrices = async (symbols = []) => {
   // ── 1. CoinMarketCap (primary) ──────────────────────────────────────────
   // CMC only accepts clean uppercase alphanumeric symbols (1-10 chars).
   // Symbols like 'BITCOIN (HPOS10I)', 'ETH.ETH', 'USBC' cause a 400 for the whole batch.
+  const NON_CMC = new Set(['INR', 'USD', 'USDT', 'USDC']);
   const CMC_VALID = /^[A-Z0-9]{1,10}$/;
-  const cmcSymbols = symbols.filter((s) => !STOCK_TICKERS.has(s) && CMC_VALID.test(s));
-  const skippedToFallback = symbols.filter((s) => !STOCK_TICKERS.has(s) && !CMC_VALID.test(s));
+  const cmcSymbols = symbols.filter((s) => !STOCK_TICKERS.has(s) && !NON_CMC.has(s) && CMC_VALID.test(s));
+  const skippedToFallback = symbols.filter((s) => !STOCK_TICKERS.has(s) && !NON_CMC.has(s) && !CMC_VALID.test(s));
   if (skippedToFallback.length > 0) {
     console.log(`⚠️  Non-standard symbols skipped (CMC invalid): [${skippedToFallback.join(', ')}]`);
+  }
+
+  // Handle INR via live exchange rate feed
+  if (symbols.includes('INR')) {
+    const liveInr = await fetchLiveInrRate();
+    result['INR'] = {
+      price: liveInr,
+      rate: liveInr,
+      change24h: 0,
+      change7d: 0,
+      change30d: 0,
+    };
   }
 
   if (cmcApiKey && cmcSymbols.length > 0) {

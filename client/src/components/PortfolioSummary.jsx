@@ -3,6 +3,35 @@ import { TrendingUp, TrendingDown, DollarSign, PieChart, Clock, Zap } from 'luci
 
 export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
   const [summaryView, setSummaryView] = useState('24h'); // '24h' | '7d' | 'stocks'
+  const [selectedCurrency, setSelectedCurrency] = useState(() => {
+    try {
+      return localStorage.getItem('portfolio_currency') || 'USD';
+    } catch {
+      return 'USD';
+    }
+  });
+
+  const handleCurrencyChange = (curr) => {
+    setSelectedCurrency(curr);
+    try {
+      localStorage.setItem('portfolio_currency', curr);
+    } catch (e) {
+      console.warn('Could not save currency preference:', e);
+    }
+  };
+
+  // Live prices for currency conversions
+  const btcPrice = Number(prices.BTC?.price || 84300);
+  const hypePrice = Number(prices.HYPE?.price || 93.8);
+  const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
+
+  // Currency options for toggle pill
+  const currencyOptions = [
+    { id: 'USD', symbol: '$', label: 'USD', title: 'US Dollar ($)' },
+    { id: 'INR', symbol: '₹', label: 'INR', title: 'Indian Rupee (₹)' },
+    { id: 'BTC', symbol: '₿', label: 'BTC', title: 'Bitcoin (₿)' },
+    { id: 'HYPE', symbol: 'HP', label: 'HYPE', title: 'Hyperliquid (HYPE)' },
+  ];
 
   // Calculate total portfolio values
   let totalValue = 0;
@@ -86,6 +115,64 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num || 0);
 
+  const formatINR = (num) => {
+    const val = (num || 0) * inrRate;
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(val);
+  };
+
+  const formatBTC = (num) => {
+    const val = btcPrice > 0 ? (num || 0) / btcPrice : 0;
+    if (val === 0) return '0.0000 ₿';
+    const absVal = Math.abs(val);
+    const sign = val < 0 ? '-' : '';
+    let formatted;
+    if (absVal >= 1000) {
+      formatted = absVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else if (absVal >= 1) {
+      formatted = absVal.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    } else if (absVal >= 0.01) {
+      formatted = absVal.toFixed(4);
+    } else {
+      formatted = absVal.toFixed(6);
+    }
+    return `${sign}${formatted} ₿`;
+  };
+
+  const formatHYPE = (num) => {
+    const val = hypePrice > 0 ? (num || 0) / hypePrice : 0;
+    if (val === 0) return '0.00 HYPE';
+    const absVal = Math.abs(val);
+    const sign = val < 0 ? '-' : '';
+    let formatted;
+    if (absVal >= 1000) {
+      formatted = absVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else if (absVal >= 1) {
+      formatted = absVal.toFixed(2);
+    } else {
+      formatted = absVal.toFixed(4);
+    }
+    return `${sign}${formatted} HYPE`;
+  };
+
+  const formatSelectedCurrency = (num) => {
+    switch (selectedCurrency) {
+      case 'INR':
+        return formatINR(num);
+      case 'BTC':
+        return formatBTC(num);
+      case 'HYPE':
+        return formatHYPE(num);
+      case 'USD':
+      default:
+        return formatUSD(num);
+    }
+  };
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -100,20 +187,78 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
     <div className="space-y-6 mb-8">
       {/* Top Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Total Net Worth Card */}
+        {/* Total Net Worth Card with Multi-Currency Switcher */}
         <div className="glass-card rounded-2xl p-6 relative overflow-hidden group">
           <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition-all" />
+          
           <div className="flex items-center justify-between dark:text-slate-400 text-slate-500 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Portfolio Value</span>
-            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400">
-              <DollarSign className="w-5 h-5" />
+
+            {/* Quick Currency Toggle Pill */}
+            <div className="flex items-center dark:bg-slate-900 bg-slate-200/80 p-0.5 rounded-lg border dark:border-slate-800 border-slate-300 shadow-xs">
+              {currencyOptions.map((opt) => {
+                const isActive = selectedCurrency === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => handleCurrencyChange(opt.id)}
+                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded cursor-pointer transition flex items-center space-x-0.5 ${
+                      isActive
+                        ? 'bg-cyan-500 text-slate-950 shadow-xs font-extrabold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title={opt.title}
+                  >
+                    <span>{opt.symbol}</span>
+                    <span className="hidden sm:inline">{opt.label !== opt.symbol ? opt.label : ''}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold dark:text-white text-slate-900 tracking-tight font-heading">
-            {formatUSD(totalValue)}
+
+          <div className="flex flex-wrap items-baseline gap-2">
+            <div className="text-2xl sm:text-3xl font-extrabold dark:text-white text-slate-900 tracking-tight font-heading">
+              {formatSelectedCurrency(totalValue)}
+            </div>
+            {selectedCurrency !== 'USD' && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-md dark:bg-slate-800/80 bg-slate-200/70 dark:text-slate-400 text-slate-600 border dark:border-slate-700/60 border-slate-300">
+                ≈ {formatUSD(totalValue)}
+              </span>
+            )}
           </div>
-          <div className="mt-2 flex items-center space-x-2 text-xs dark:text-slate-400 text-slate-500">
-            <span>Across {holdings.length} total holding{holdings.length === 1 ? '' : 's'}</span>
+
+          <div className="mt-2 flex items-center justify-between text-xs dark:text-slate-400 text-slate-500">
+            <div className="flex items-center space-x-1.5">
+              {selectedCurrency === 'USD' && (
+                <span>Across {holdings.length} total holding{holdings.length === 1 ? '' : 's'}</span>
+              )}
+              {selectedCurrency === 'INR' && (
+                <>
+                  <span className="font-semibold dark:text-slate-300 text-slate-700">1 USD ≈ ₹{inrRate.toFixed(2)}</span>
+                  <span>•</span>
+                  <span>{holdings.length} holding{holdings.length === 1 ? '' : 's'}</span>
+                </>
+              )}
+              {selectedCurrency === 'BTC' && (
+                <>
+                  <span className="font-semibold dark:text-slate-300 text-slate-700">
+                    1 BTC ≈ ${btcPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </span>
+                  <span>•</span>
+                  <span>{holdings.length} holding{holdings.length === 1 ? '' : 's'}</span>
+                </>
+              )}
+              {selectedCurrency === 'HYPE' && (
+                <>
+                  <span className="font-semibold dark:text-slate-300 text-slate-700">
+                    1 HYPE ≈ ${hypePrice.toFixed(2)}
+                  </span>
+                  <span>•</span>
+                  <span>{holdings.length} holding{holdings.length === 1 ? '' : 's'}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -174,7 +319,7 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
               }`}
             >
               {isPositive ? '+' : ''}
-              {formatUSD(activePnL)}
+              {formatSelectedCurrency(activePnL)}
             </div>
             <div
               className={`text-sm font-bold px-2 py-0.5 rounded-md ${
@@ -190,11 +335,11 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
           <div className="mt-2 text-xs dark:text-slate-400 text-slate-500">
             {summaryView === 'stocks' ? (
               <span>
-                Stock Invested Cost: <strong className="dark:text-slate-200 text-slate-800">{formatUSD(totalStockCost)}</strong>
+                Stock Invested Cost: <strong className="dark:text-slate-200 text-slate-800">{formatSelectedCurrency(totalStockCost)}</strong>
               </span>
             ) : (
               <span>
-                Market Basis: <strong className="dark:text-slate-200 text-slate-800">{formatUSD(startBasis)}</strong>
+                Market Basis: <strong className="dark:text-slate-200 text-slate-800">{formatSelectedCurrency(startBasis)}</strong>
               </span>
             )}
           </div>

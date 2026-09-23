@@ -90,12 +90,14 @@ function AppContent() {
       const holdingsRes = await api.get('/holdings');
       const fetchedHoldings = holdingsRes.data.holdings || [];
 
-      // Fetch live market quotes for symbols present in user's portfolio
-      const symbols = [...new Set(fetchedHoldings.map((h) => h.symbol))];
+      // Fetch live market quotes for symbols present in user's portfolio + conversion benchmarks
+      const symbols = [...new Set([...fetchedHoldings.map((h) => h.symbol), 'BTC', 'HYPE', 'INR'])];
       let fetchedPrices = {};
-      if (symbols.length > 0) {
+      try {
         const pricesRes = await api.get(`/prices?symbols=${symbols.join(',')}`);
         fetchedPrices = pricesRes.data.prices || {};
+      } catch (priceErr) {
+        console.warn('Prices fetch warning:', priceErr.message);
       }
 
       // Atomically update both holdings AND prices together
