@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useWallets } from '../context/WalletContext';
 import { Wallet, Plus, ChevronRight, Coins, Landmark, CreditCard, Vault, Shield } from 'lucide-react';
@@ -50,6 +50,20 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
 
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num);
+
+  // Sort wallets descending by total dollar balance (highest $ count account first)
+  const sortedWalletsWithValues = useMemo(() => {
+    return wallets
+      .map((wallet) => ({
+        wallet,
+        walletVal: calculateWalletValue(wallet._id),
+      }))
+      .sort((a, b) => {
+        const diff = (b.walletVal || 0) - (a.walletVal || 0);
+        if (Math.abs(diff) > 0.0001) return diff;
+        return (a.wallet.name || '').localeCompare(b.wallet.name || '');
+      });
+  }, [wallets, holdings, prices]);
 
   if (loading) {
     return (
@@ -108,9 +122,8 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {wallets.map((wallet) => {
+          {sortedWalletsWithValues.map(({ wallet, walletVal }) => {
             const IconComp = ICON_MAP[wallet.icon] || Wallet;
-            const walletVal = calculateWalletValue(wallet._id);
             const pctOfTotal = totalPortfolioValue > 0 ? (walletVal / totalPortfolioValue) * 100 : 0;
             const accentColor = wallet.color || '#06b6d4';
 

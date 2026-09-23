@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useWallets } from '../context/WalletContext';
 import { Wallet, Plus, Edit2, Trash2, ChevronRight, Coins, Landmark, CreditCard, Vault, Shield } from 'lucide-react';
@@ -85,6 +85,20 @@ export const WalletsPage = ({
     };
   };
 
+  // Sort wallets descending by total dollar balance (highest $ count account first)
+  const sortedWalletsWithStats = useMemo(() => {
+    return wallets
+      .map((wallet) => ({
+        wallet,
+        stats: calculateWalletStats(wallet._id),
+      }))
+      .sort((a, b) => {
+        const diff = (b.stats.totalValue || 0) - (a.stats.totalValue || 0);
+        if (Math.abs(diff) > 0.0001) return diff;
+        return (a.wallet.name || '').localeCompare(b.wallet.name || '');
+      });
+  }, [wallets, holdings, prices]);
+
   const handleDelete = async (wallet, count) => {
     if (onDeleteWallet) {
       onDeleteWallet(wallet, count);
@@ -155,9 +169,8 @@ export const WalletsPage = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {wallets.map((wallet) => {
+          {sortedWalletsWithStats.map(({ wallet, stats }) => {
             const IconComp = ICON_MAP[wallet.icon] || Wallet;
-            const stats = calculateWalletStats(wallet._id);
             const accentColor = wallet.color || '#06b6d4';
             const isProfit = stats.pnl >= 0;
 

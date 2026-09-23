@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { WalletProvider, useWallets } from './context/WalletContext';
@@ -17,6 +17,7 @@ import { ExtractionReviewModal } from './components/ExtractionReviewModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { AuthModal } from './components/AuthModal';
 import { LoadingScreen } from './components/LoadingScreen';
+import { sortWalletsByValue } from './utils/walletUtils';
 
 function AppContent() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -37,6 +38,11 @@ function AppContent() {
   const walletPathMatch = location.pathname.match(/^\/wallets\/([a-f0-9]{24})$/i);
   const activeWalletId = walletPathMatch ? walletPathMatch[1] : '';
   const activeWallet = wallets.find((w) => w._id === activeWalletId);
+
+  // Wallets sorted in descending order of total USD value (highest dollar count first)
+  const sortedWallets = useMemo(() => {
+    return sortWalletsByValue(wallets, holdings, prices);
+  }, [wallets, holdings, prices]);
 
   // Tab Filtering ('all' | 'crypto' | 'stock' | 'cash')
   const [activeTab, setActiveTab] = useState('all');
@@ -407,6 +413,8 @@ function AppContent() {
           setWalletToEdit(null);
           setIsWalletModalOpen(true);
         }}
+        holdings={holdings}
+        prices={prices}
       />
 
       {/* Main Layout Container */}
@@ -544,7 +552,7 @@ function AppContent() {
         }}
         onSave={handleSaveHolding}
         holdingToEdit={holdingToEdit}
-        wallets={wallets}
+        wallets={sortedWallets}
         targetWalletId={targetWalletId}
       />
 
@@ -582,7 +590,7 @@ function AppContent() {
         tier={extractionTier}
         manualFallback={manualFallback}
         rawText={extractionRawText}
-        wallets={wallets}
+        wallets={sortedWallets}
         targetWalletId={targetWalletId}
       />
 

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useWallets } from '../context/WalletContext';
+import { sortWalletsByValue } from '../utils/walletUtils';
 import {
   Wallet,
   LayoutDashboard,
@@ -31,11 +32,15 @@ const ICON_MAP = {
   vault: Vault,
 };
 
-export const Sidebar = ({ isOpen, onClose, onOpenAddWalletModal }) => {
+export const Sidebar = ({ isOpen, onClose, onOpenAddWalletModal, holdings = [], prices = {} }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const { wallets } = useWallets();
   const location = useLocation();
+
+  const sortedWallets = useMemo(() => {
+    return sortWalletsByValue(wallets, holdings, prices);
+  }, [wallets, holdings, prices]);
 
   if (!isAuthenticated) return null;
 
@@ -177,7 +182,7 @@ export const Sidebar = ({ isOpen, onClose, onOpenAddWalletModal }) => {
                 No wallets created yet
               </div>
             ) : (
-              wallets.map((wallet) => {
+              sortedWallets.map((wallet) => {
                 const IconComp = ICON_MAP[wallet.icon] || Wallet;
                 const accentColor = wallet.color || '#06b6d4';
                 const isActive = location.pathname === `/wallets/${wallet._id}`;
