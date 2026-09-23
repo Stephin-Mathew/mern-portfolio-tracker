@@ -18,7 +18,10 @@ let _tokenReadyPromise = new Promise((resolve) => {
 // Safety timeout: if token provider is never set (e.g., user is not signed in),
 // don't block API calls forever
 setTimeout(() => {
-  _resolveTokenReady();
+  if (typeof _resolveTokenReady === 'function') {
+    _resolveTokenReady();
+    _resolveTokenReady = null;
+  }
 }, 3000);
 
 export const setAuthTokenProvider = (provider) => {

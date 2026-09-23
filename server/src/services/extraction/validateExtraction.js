@@ -89,8 +89,8 @@ export const validateExtractionResult = (data) => {
       totalValue,
       avgBuyPrice,
       assetType,
-      walletOrAccount: item.walletOrAccount ? String(item.walletOrAccount).trim() : 'AI Extraction',
-      notes: item.notes ? String(item.notes).trim() : 'AI Parsed from screenshot',
+      walletOrAccount: item.walletOrAccount ? String(item.walletOrAccount).trim() : '',
+      notes: item.notes ? String(item.notes).trim() : '',
     });
   });
 

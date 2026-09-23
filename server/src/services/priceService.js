@@ -1,7 +1,38 @@
 import axios from 'axios';
+import https from 'https';
+import dns from 'dns';
 import cron from 'node-cron';
 import { PriceCache } from '../models/PriceCache.js';
 import { PriceOverride } from '../models/PriceOverride.js';
+
+// Public DNS resolver to bypass ISP crypto DNS blocking (e.g. for pro-api.coinmarketcap.com)
+const publicDnsResolver = new dns.Resolver();
+try {
+  publicDnsResolver.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch (dnsErr) {
+  console.warn('Could not set custom DNS servers on resolver:', dnsErr.message);
+}
+
+const customLookup = (hostname, options, callback) => {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  publicDnsResolver.resolve4(hostname, (err, addresses) => {
+    if (err || !addresses || addresses.length === 0) {
+      dns.lookup(hostname, options, callback);
+    } else if (options && options.all) {
+      callback(null, addresses.map((a) => ({ address: a, family: 4 })));
+    } else {
+      callback(null, addresses[0], 4);
+    }
+  });
+};
+
+const customHttpsAgent = new https.Agent({
+  lookup: customLookup,
+  keepAlive: true,
+});
 
 // Standard baseline market quotes with 24h/7d/30d change percentages for mock fallback
 const FALLBACK_PRICES = {
@@ -35,6 +66,17 @@ const FALLBACK_PRICES = {
   USD: { price: 1.0, change24h: 0, change7d: 0, change30d: 0 },
   USDT: { price: 1.0, change24h: 0.01, change7d: 0.02, change30d: 0.01 },
   USDC: { price: 1.0, change24h: 0.0, change7d: 0.01, change30d: 0.0 },
+  // Hyperliquid ecosystem
+  HYPE: { price: 95.0, change24h: 2.0, change7d: 8.5, change30d: 45.0 },
+  WHYPE: { price: 95.0, change24h: 2.0, change7d: 8.5, change30d: 45.0 },
+  // Popular tokens in user portfolio
+  ENA: { price: 0.38, change24h: 1.2, change7d: 4.5, change30d: 9.0 },
+  EIGEN: { price: 2.1, change24h: 0.8, change7d: 3.2, change30d: 7.5 },
+  ETHFI: { price: 1.45, change24h: 1.5, change7d: 5.0, change30d: 12.0 },
+  OKB: { price: 45.0, change24h: 0.5, change7d: 2.1, change30d: 5.5 },
+  OM: { price: 0.65, change24h: 1.1, change7d: 3.4, change30d: 8.0 },
+  ZRO: { price: 3.2, change24h: 1.8, change7d: 6.0, change30d: 14.0 },
+  HPOS10I: { price: 0.0, change24h: 0, change7d: 0, change30d: 0 },
 };
 
 /**
@@ -165,26 +207,120 @@ export const getPricesForSymbols = async (symbols = [], userId = null) => {
   return finalPriceMap;
 };
 
+// CoinGecko ticker → CoinGecko ID map for common crypto assets
+const COINGECKO_ID_MAP = {
+  BTC: 'bitcoin',
+  ETH: 'ethereum',
+  SOL: 'solana',
+  BNB: 'binancecoin',
+  XRP: 'ripple',
+  DOGE: 'dogecoin',
+  ADA: 'cardano',
+  AVAX: 'avalanche-2',
+  LINK: 'chainlink',
+  DOT: 'polkadot',
+  SUI: 'sui',
+  NEAR: 'near',
+  PEPE: 'pepe',
+  SHIB: 'shiba-inu',
+  ARB: 'arbitrum',
+  OP: 'optimism',
+  UNI: 'uniswap',
+  AAVE: 'aave',
+  MATIC: 'matic-network',
+  POL: 'matic-network',
+  LTC: 'litecoin',
+  BCH: 'bitcoin-cash',
+  ATOM: 'cosmos',
+  TON: 'the-open-network',
+  APT: 'aptos',
+  INJ: 'injective-protocol',
+  IMX: 'immutable-x',
+  FIL: 'filecoin',
+  TRX: 'tron',
+  ALGO: 'algorand',
+  SAND: 'the-sandbox',
+  MANA: 'decentraland',
+  CRV: 'curve-dao-token',
+  COMP: 'compound-governance-token',
+  MKR: 'maker',
+  SNX: 'havven',
+  FTM: 'fantom',
+  ETC: 'ethereum-classic',
+  XLM: 'stellar',
+  VET: 'vechain',
+  HBAR: 'hedera-hashgraph',
+  ICP: 'internet-computer',
+  GRT: 'the-graph',
+  ENS: 'ethereum-name-service',
+  FLOKI: 'floki',
+  WIF: 'dogwifcoin',
+  BONK: 'bonk',
+  JTO: 'jito-governance-token',
+  PYTH: 'pyth-network',
+  TIA: 'celestia',
+  SEI: 'sei-network',
+  // Hyperliquid ecosystem
+  HYPE: 'hyperliquid',
+  WHYPE: 'wrapped-hyperliquid', // wrapped HYPE — may not be on CoinGecko, will fall to baseline
+  // Popular mid/small caps
+  ENA: 'ethena',
+  EIGEN: 'eigenlayer',
+  ETHFI: 'ether-fi',
+  OKB: 'okb',
+  OM: 'mantra-dao',
+  ZRO: 'layerzero',
+  HPOS10I: 'hpos10i',
+  ZORA: 'zora-network',
+  SENA: 'sena',        // staked ENA
+  UENA: 'ulthena',    // may not be listed — falls to baseline
+  MAX: 'matr1x-fire',
+  OKE: 'okex',        // if OKE is a token you hold
+  FEUSD: 'frax-ether',// placeholder — update if different
+  SENT: 'sentinel-group',
+  PLUME: 'plume',
+};
+
+// Stock tickers we do NOT attempt to fetch from CoinGecko
+const STOCK_TICKERS = new Set([
+  'AAPL','MSFT','NVDA','TSLA','GOOGL','GOOG','AMZN','META','SPY','QQQ',
+  'NFLX','AMD','INTC','BABA','V','MA','JPM','BAC','WMT','DIS',
+]);
+
 /**
- * Fetches market prices and 24h/7d/30d change percentages from CoinMarketCap / Fallbacks and updates PriceCache
+ * Fetches market prices and 24h/7d/30d change percentages.
+ * Primary:  CoinMarketCap (pro-api.coinmarketcap.com) — uses COINMARKETCAP_API_KEY
+ * Fallback: CoinGecko free API (api.coingecko.com) — no key needed
+ * Static:   FALLBACK_PRICES baseline for stocks and any unknown symbols
  */
 export const fetchAndCachePrices = async (symbols = []) => {
   const result = {};
   const cmcApiKey = process.env.COINMARKETCAP_API_KEY;
 
-  if (cmcApiKey && symbols.length > 0) {
+  // ── 1. CoinMarketCap (primary) ──────────────────────────────────────────
+  // CMC only accepts clean uppercase alphanumeric symbols (1-10 chars).
+  // Symbols like 'BITCOIN (HPOS10I)', 'ETH.ETH', 'USBC' cause a 400 for the whole batch.
+  const CMC_VALID = /^[A-Z0-9]{1,10}$/;
+  const cmcSymbols = symbols.filter((s) => !STOCK_TICKERS.has(s) && CMC_VALID.test(s));
+  const skippedToFallback = symbols.filter((s) => !STOCK_TICKERS.has(s) && !CMC_VALID.test(s));
+  if (skippedToFallback.length > 0) {
+    console.log(`⚠️  Non-standard symbols skipped (CMC invalid): [${skippedToFallback.join(', ')}]`);
+  }
+
+  if (cmcApiKey && cmcSymbols.length > 0) {
+    console.log(`📤 Sending to CMC: [${cmcSymbols.join(', ')}]`);
     try {
       const response = await axios.get(
         'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest',
         {
           headers: { 'X-CMC_PRO_API_KEY': cmcApiKey },
-          params: { symbol: symbols.join(',') },
-          timeout: 5000,
+          params: { symbol: cmcSymbols.join(',') },
+          timeout: 10000,
+          httpsAgent: customHttpsAgent,
         }
       );
-
       const data = response.data?.data || {};
-      for (const sym of symbols) {
+      for (const sym of cmcSymbols) {
         if (data[sym] && data[sym].quote?.USD) {
           const usdQuote = data[sym].quote.USD;
           result[sym] = {
@@ -195,8 +331,56 @@ export const fetchAndCachePrices = async (symbols = []) => {
           };
         }
       }
+      console.log(`✅ CoinMarketCap: fetched live prices for ${Object.keys(result).length}/${cmcSymbols.length} crypto symbols.`);
     } catch (err) {
-      console.warn(`⚠️ CoinMarketCap API call failed: ${err.message}. Using fallback baseline prices.`);
+      const errBody = err.response?.data;
+      console.warn(`⚠️ CoinMarketCap API call failed: ${err.message}`);
+      if (errBody) console.warn(`   CMC error body: ${JSON.stringify(errBody)}`);
+      console.warn(`   Symbols sent: [${cmcSymbols.join(', ')}]`);
+      console.warn(`   Falling back to CoinGecko...`);
+    }
+  }
+
+
+
+  // ── 2. CoinGecko (fallback for any crypto symbols CMC missed) ───────────
+  const cryptoSymbolsMissed = symbols.filter(
+    (s) => !result[s] && !STOCK_TICKERS.has(s) && COINGECKO_ID_MAP[s]
+  );
+
+  if (cryptoSymbolsMissed.length > 0) {
+    try {
+      const geckoIds = cryptoSymbolsMissed.map((s) => COINGECKO_ID_MAP[s]);
+      const response = await axios.get(
+        'https://api.coingecko.com/api/v3/simple/price',
+        {
+          params: {
+            ids: geckoIds.join(','),
+            vs_currencies: 'usd',
+            include_24hr_change: true,
+            // Note: 7d/30d change not available on free CoinGecko tier
+          },
+          timeout: 8000,
+        }
+      );
+      const data = response.data || {};
+      for (const sym of cryptoSymbolsMissed) {
+        const geckoId = COINGECKO_ID_MAP[sym];
+        const entry = data[geckoId];
+        if (entry && entry.usd) {
+          const fallback = FALLBACK_PRICES[sym] || {};
+          result[sym] = {
+            price: Number(entry.usd || 0),
+            change24h: Number(entry.usd_24h_change || 0),
+            // 7d/30d unavailable on CoinGecko free tier — use baseline
+            change7d: Number(fallback.change7d || 0),
+            change30d: Number(fallback.change30d || 0),
+          };
+        }
+      }
+      console.log(`✅ CoinGecko fallback: fetched prices for ${cryptoSymbolsMissed.length} missed symbol(s).`);
+    } catch (err) {
+      console.warn(`⚠️ CoinGecko fallback also failed: ${err.message}. Using static baseline prices.`);
     }
   }
 

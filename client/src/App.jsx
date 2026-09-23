@@ -284,9 +284,7 @@ function AppContent() {
 
   // Trigger Custom Delete Modal for a Holding
   const promptDeleteHolding = (holding) => {
-    const desc = `${holding.quantity} ${holding.symbol}${
-      holding.chain ? ' on ' + holding.chain : ''
-    }${holding.walletOrAccount ? ' (' + holding.walletOrAccount + ')' : ''}`;
+    const desc = `${holding.quantity} ${holding.symbol}`;
 
     setDeleteTarget({
       type: 'holding',
@@ -425,8 +423,14 @@ function AppContent() {
             setWalletToEdit(null);
             setIsWalletModalOpen(true);
           }}
-          onOpenUploadModal={() => setIsUploadModalOpen(true)}
-          onOpenJsonExtractModal={() => setIsJsonExtractModalOpen(true)}
+          onOpenUploadModal={() => {
+            setTargetWalletId(activeWalletId || '');
+            setIsUploadModalOpen(true);
+          }}
+          onOpenJsonExtractModal={() => {
+            setTargetWalletId(activeWalletId || '');
+            setIsJsonExtractModalOpen(true);
+          }}
           onOpenAuthModal={() => setIsAuthModalOpen(true)}
           onRefreshPrices={handleRefreshPrices}
           refreshingPrices={refreshingPrices}
@@ -540,7 +544,8 @@ function AppContent() {
         }}
         onSave={handleSaveHolding}
         holdingToEdit={holdingToEdit}
-        defaultWalletId={targetWalletId}
+        wallets={wallets}
+        targetWalletId={targetWalletId}
       />
 
       <WalletFormModal
@@ -568,13 +573,17 @@ function AppContent() {
 
       <ExtractionReviewModal
         isOpen={isReviewModalOpen}
-        onClose={() => setIsReviewModalOpen(false)}
+        onClose={() => {
+          setIsReviewModalOpen(false);
+          setTargetWalletId('');
+        }}
         extractedItems={extractedData}
-        defaultWalletId={activeWalletId}
         onSaveSuccess={handleBatchSaveSuccess}
         tier={extractionTier}
         manualFallback={manualFallback}
         rawText={extractionRawText}
+        wallets={wallets}
+        targetWalletId={targetWalletId}
       />
 
       <DeleteConfirmModal

@@ -79,84 +79,6 @@ export const captureUserSnapshot = async (userId) => {
 };
 
 /**
- * Generate synthetic historical curve leading up to current value
- * if real database snapshots are sparse or fresh user
- */
-const generateHistoricalDataPoints = (targetValue, targetCost, cryptoVal, stockVal, cashVal, days, pointCount) => {
-  const points = [];
-  const now = Date.now();
-  const intervalMs = (days * 24 * 60 * 60 * 1000) / (pointCount - 1);
-
-  // If targetValue is 0 (empty portfolio), return flat 0 points
-  if (targetValue <= 0) {
-    for (let i = pointCount - 1; i >= 0; i--) {
-      const timestamp = new Date(now - i * intervalMs);
-      points.push({
-        timestamp,
-        totalValue: 0,
-        totalCost: 0,
-        totalPnL: 0,
-        cryptoValue: 0,
-        stockValue: 0,
-        cashValue: 0,
-      });
-    }
-    return points;
-  }
-
-  // Deterministic seed waveform generation
-  const baseValue = targetValue;
-  const baseCost = targetCost > 0 ? targetCost : baseValue * 0.82;
-
-  // Trend volatility multiplier based on timeframe
-  const maxVariance = days <= 1 ? 0.015 : days <= 7 ? 0.04 : days <= 30 ? 0.09 : 0.18;
-
-  for (let i = pointCount - 1; i >= 0; i--) {
-    const timestamp = new Date(now - i * intervalMs);
-    const progress = (pointCount - 1 - i) / (pointCount - 1); // 0 at oldest, 1 at current (today)
-
-    if (i === 0) {
-      // Last point MUST match current real value exactly
-      points.push({
-        timestamp,
-        totalValue: Number(targetValue.toFixed(2)),
-        totalCost: Number(targetCost.toFixed(2)),
-        totalPnL: Number((targetValue - targetCost).toFixed(2)),
-        cryptoValue: Number(cryptoVal.toFixed(2)),
-        stockValue: Number(stockVal.toFixed(2)),
-        cashValue: Number(cashVal.toFixed(2)),
-      });
-    } else {
-      // Curve simulation: combination of linear growth + sine market cycles + small noise
-      const timeFactor = (pointCount - i) / pointCount;
-      const cycle1 = Math.sin(timeFactor * Math.PI * 3) * (maxVariance * 0.4);
-      const cycle2 = Math.cos(timeFactor * Math.PI * 5) * (maxVariance * 0.2);
-      const noise = (Math.sin(i * 17) * 0.5 + Math.cos(i * 31) * 0.5) * (maxVariance * 0.2);
-
-      const netDeltaFactor = 1 - (1 - progress) * (maxVariance * 0.8) + cycle1 + cycle2 + noise;
-      const val = Math.max(0, baseValue * netDeltaFactor);
-      const cost = Math.max(0, baseCost * (1 - (1 - progress) * 0.05));
-
-      const ratioCrypto = baseValue > 0 ? cryptoVal / baseValue : 0.6;
-      const ratioStock = baseValue > 0 ? stockVal / baseValue : 0.3;
-      const ratioCash = baseValue > 0 ? cashVal / baseValue : 0.1;
-
-      points.push({
-        timestamp,
-        totalValue: Number(val.toFixed(2)),
-        totalCost: Number(cost.toFixed(2)),
-        totalPnL: Number((val - cost).toFixed(2)),
-        cryptoValue: Number((val * ratioCrypto).toFixed(2)),
-        stockValue: Number((val * ratioStock).toFixed(2)),
-        cashValue: Number((val * ratioCash).toFixed(2)),
-      });
-    }
-  }
-
-  return points;
-};
-
-/**
  * Get portfolio history data formatted for chart rendering
  */
 export const getPortfolioHistory = async (userId, timeframe = '30d') => {
@@ -214,8 +136,8 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
 
   let dataPoints = [];
 
-  if (dbSnapshots.length >= config.points / 2) {
-    // If sufficient DB snapshots exist, format DB snapshots
+  if (dbSnapshots.length > 0) {
+    // Use real DB snapshots only — no synthetic data
     dataPoints = dbSnapshots.map((s) => ({
       timestamp: s.timestamp,
       totalValue: s.totalValue,
@@ -225,17 +147,28 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
       stockValue: s.breakdown?.stock || 0,
       cashValue: s.breakdown?.cash || 0,
     }));
+
+    // Anchor latest point strictly to live holdings valuation
+    const last = dataPoints[dataPoints.length - 1];
+    last.totalValue = Number(currentVal.toFixed(2));
+    last.totalCost = Number(currentCost.toFixed(2));
+    last.totalPnL = Number((currentVal - currentCost).toFixed(2));
+    last.cryptoValue = Number(cryptoVal.toFixed(2));
+    last.stockValue = Number(stockVal.toFixed(2));
+    last.cashValue = Number(cashVal.toFixed(2));
   } else {
-    // Fill/blend with synthetic historical curve for smooth visualization
-    dataPoints = generateHistoricalDataPoints(
-      currentVal,
-      currentCost,
-      cryptoVal,
-      stockVal,
-      cashVal,
-      config.days,
-      config.points
-    );
+    // No snapshots yet — show a single point at current value (portfolio just created)
+    dataPoints = [
+      {
+        timestamp: new Date(),
+        totalValue: Number(currentVal.toFixed(2)),
+        totalCost: Number(currentCost.toFixed(2)),
+        totalPnL: Number((currentVal - currentCost).toFixed(2)),
+        cryptoValue: Number(cryptoVal.toFixed(2)),
+        stockValue: Number(stockVal.toFixed(2)),
+        cashValue: Number(cashVal.toFixed(2)),
+      },
+    ];
   }
 
   // Summary statistics
@@ -243,7 +176,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
   const lastPoint = dataPoints[dataPoints.length - 1] || { totalValue: currentVal, totalCost: currentCost };
 
   const startValue = firstPoint.totalValue;
-  const endValue = lastPoint.totalValue;
+  const endValue = Number(currentVal.toFixed(2));
   const changeAmount = endValue - startValue;
   const changePercent = startValue > 0 ? (changeAmount / startValue) * 100 : 0;
 
@@ -255,7 +188,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
     label: config.label,
     dataPoints,
     summary: {
-      currentValue: Number(endValue.toFixed(2)),
+      currentValue: endValue,
       startValue: Number(startValue.toFixed(2)),
       changeAmount: Number(changeAmount.toFixed(2)),
       changePercent: Number(changePercent.toFixed(2)),

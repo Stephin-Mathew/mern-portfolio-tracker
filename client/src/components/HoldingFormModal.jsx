@@ -1,18 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Coins, TrendingUp, Wallet as WalletIcon, Network } from 'lucide-react';
-import { useWallets } from '../context/WalletContext';
+import { X, Save, Coins, TrendingUp, DollarSign, Wallet } from 'lucide-react';
 
-export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defaultWalletId }) => {
-  const { wallets } = useWallets();
-
+export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, wallets = [], targetWalletId = '' }) => {
   const [formData, setFormData] = useState({
     assetType: 'crypto',
     symbol: '',
     quantity: '',
     avgBuyPrice: '',
     walletId: '',
-    walletOrAccount: '',
-    chain: '',
     notes: '',
   });
   const [error, setError] = useState('');
@@ -25,43 +20,23 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defau
         symbol: holdingToEdit.symbol || '',
         quantity: holdingToEdit.quantity !== undefined ? holdingToEdit.quantity : '',
         avgBuyPrice: holdingToEdit.avgBuyPrice !== undefined ? holdingToEdit.avgBuyPrice : '',
-        walletId: holdingToEdit.walletId || '',
-        walletOrAccount: holdingToEdit.walletOrAccount || '',
-        chain: holdingToEdit.chain || '',
+        walletId: holdingToEdit.walletId ? String(holdingToEdit.walletId) : '',
         notes: holdingToEdit.notes || '',
       });
     } else {
-      const initialWallet = defaultWalletId
-        ? wallets.find((w) => w._id === defaultWalletId)
-        : wallets.length > 0
-        ? wallets[0]
-        : null;
-
       setFormData({
         assetType: 'crypto',
         symbol: '',
         quantity: '',
         avgBuyPrice: '',
-        walletId: initialWallet ? initialWallet._id : '',
-        walletOrAccount: initialWallet ? initialWallet.name : '',
-        chain: '',
+        walletId: targetWalletId || '',
         notes: '',
       });
     }
     setError('');
-  }, [holdingToEdit, isOpen, defaultWalletId, wallets]);
+  }, [holdingToEdit, isOpen, targetWalletId]);
 
   if (!isOpen) return null;
-
-  const handleWalletSelect = (e) => {
-    const selectedId = e.target.value;
-    const selectedWallet = wallets.find((w) => w._id === selectedId);
-    setFormData((prev) => ({
-      ...prev,
-      walletId: selectedId,
-      walletOrAccount: selectedWallet ? selectedWallet.name : prev.walletOrAccount,
-    }));
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -88,14 +63,13 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defau
         ...formData,
         symbol: formData.symbol.trim().toUpperCase(),
         quantity: Number(formData.quantity),
+        walletId: formData.walletId || null,
         avgBuyPrice:
           formData.assetType === 'stock'
             ? formData.avgBuyPrice
               ? Number(formData.avgBuyPrice)
               : 0
             : null,
-        walletId: formData.walletId || null,
-        chain: formData.chain.trim(),
       });
       onClose();
     } catch (err) {
@@ -140,7 +114,7 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defau
               {[
                 { type: 'crypto', label: 'Crypto', icon: Coins },
                 { type: 'stock', label: 'Stock', icon: TrendingUp },
-                { type: 'cash', label: 'Cash', icon: WalletIcon },
+                { type: 'cash', label: 'Cash', icon: DollarSign },
               ].map(({ type, label, icon: Icon }) => (
                 <button
                   type="button"
@@ -197,54 +171,37 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defau
             </div>
           </div>
 
-          {/* Stock: Avg Buy Price & Wallet / Crypto: Wallet & Network */}
-          {formData.assetType === 'stock' ? (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
-                  Avg Buy Price ($) *
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="e.g. 185.50"
-                  value={formData.avgBuyPrice}
-                  onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
-                  className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm font-mono"
-                  required
-                />
-              </div>
-
-              {/* Wallet Assignment Dropdown */}
-              <div>
-                <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
-                  Assign Wallet / Account
-                </label>
-                <select
-                  value={formData.walletId}
-                  onChange={handleWalletSelect}
-                  className="w-full glass-input rounded-xl px-3 py-2.5 text-sm dark:bg-slate-900 bg-white dark:text-white text-slate-900 outline-none cursor-pointer"
-                >
-                  <option value="">Unassigned / General</option>
-                  {wallets.map((w) => (
-                    <option key={w._id} value={w._id}>
-                      {w.name} ({w.type})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ) : (
+          {/* Stock: Avg Buy Price */}
+          {formData.assetType === 'stock' && (
             <div>
               <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
-                Assign Wallet / Account
+                Avg Buy Price ($) *
+              </label>
+              <input
+                type="number"
+                step="any"
+                placeholder="e.g. 185.50"
+                value={formData.avgBuyPrice}
+                onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
+                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm font-mono"
+                required
+              />
+            </div>
+          )}
+
+          {/* Destination Wallet */}
+          {wallets && wallets.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
+                <Wallet className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Destination Wallet</span>
               </label>
               <select
                 value={formData.walletId}
-                onChange={handleWalletSelect}
-                className="w-full glass-input rounded-xl px-3 py-2.5 text-sm dark:bg-slate-900 bg-white dark:text-white text-slate-900 outline-none cursor-pointer"
+                onChange={(e) => setFormData({ ...formData, walletId: e.target.value })}
+                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm font-medium dark:bg-slate-900 bg-white dark:border-slate-700 border-slate-300 dark:text-white text-slate-900"
               >
-                <option value="">Unassigned / General</option>
+                <option value="">None (Unassigned / General Portfolio)</option>
                 {wallets.map((w) => (
                   <option key={w._id} value={w._id}>
                     {w.name} ({w.type})
@@ -253,35 +210,6 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, defau
               </select>
             </div>
           )}
-
-          {/* Chain / Network & Custom Account Tag */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1 flex items-center space-x-1">
-                <Network className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                <span>Chain / Network</span>
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Ethereum, Arbitrum, Polygon, BSC, Solana"
-                value={formData.chain}
-                onChange={(e) => setFormData({ ...formData, chain: e.target.value })}
-                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
-                Account Tag / Custom Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Sub-account #1"
-                value={formData.walletOrAccount}
-                onChange={(e) => setFormData({ ...formData, walletOrAccount: e.target.value })}
-                className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm"
-              />
-            </div>
-          </div>
 
           {/* Notes */}
           <div>

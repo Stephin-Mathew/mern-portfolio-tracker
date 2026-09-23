@@ -18,9 +18,9 @@ import {
   DollarSign,
   AlertCircle,
   Info,
+  Wallet,
 } from 'lucide-react';
 import api from '../api/axiosInstance';
-import { useWallets } from '../context/WalletContext';
 
 /** Tier badge component — subtle indicator of which extraction path was used */
 const TierBadge = ({ tier }) => {
@@ -71,33 +71,32 @@ export const ExtractionReviewModal = ({
   isOpen,
   onClose,
   extractedItems = [],
-  defaultWalletId: initialWalletId = '',
   onSaveSuccess,
   tier = null,
   manualFallback = false,
   rawText = '',
+  wallets = [],
+  targetWalletId = '',
 }) => {
-  const { wallets } = useWallets();
   const [items, setItems] = useState([]);
+  const [selectedWalletId, setSelectedWalletId] = useState(targetWalletId || '');
   const [livePrices, setLivePrices] = useState({});
   const [loadingPrices, setLoadingPrices] = useState(false);
-  const [defaultWalletId, setDefaultWalletId] = useState(initialWalletId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Per-row live price verification state
+  const [verifyingTicker, setVerifyingTicker] = useState(new Set());
+  const [verifiedPrices, setVerifiedPrices] = useState({}); // tempId -> { ticker, price }
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedWalletId(targetWalletId || '');
+    }
+  }, [isOpen, targetWalletId]);
 
   // Sorting state
   const [sortField, setSortField] = useState(null);
   const [sortDirection, setSortDirection] = useState('asc');
-
-  useEffect(() => {
-    if (initialWalletId) {
-      setDefaultWalletId(initialWalletId);
-    } else if (wallets.length > 0) {
-      setDefaultWalletId(wallets[0]._id);
-    } else {
-      setDefaultWalletId('');
-    }
-  }, [initialWalletId, isOpen, wallets]);
 
   // Fetch live market quotes for all extracted symbols upon open
   useEffect(() => {
@@ -136,9 +135,6 @@ export const ExtractionReviewModal = ({
           customPrice: '',
           avgBuyPrice: 0,
           assetType: 'crypto',
-          walletId: '',
-          chain: '',
-          walletOrAccount: '',
           notes: 'Manually entered from screenshot',
         },
       ]);
@@ -159,8 +155,6 @@ export const ExtractionReviewModal = ({
             priceAction: defaultAction, // 'screenshot' | 'live' | 'mapped' | 'custom'
             mappedSymbol: '',
             customPrice: ep ? String(ep) : '',
-            walletId: item.walletId || '',
-            chain: item.chain || '',
           };
         })
       );
@@ -274,12 +268,35 @@ export const ExtractionReviewModal = ({
         customPrice: '',
         avgBuyPrice: 0,
         assetType: 'crypto',
-        walletId: defaultWalletId || '',
-        chain: '',
-        walletOrAccount: 'AI Staging',
         notes: 'Manually added during review stage',
+        verifyTicker: '',
       },
     ]);
+  };
+
+  // Verify a live ticker for a given row
+  const handleVerifyTicker = async (tempId, ticker) => {
+    if (!ticker || !ticker.trim()) return;
+    const t = ticker.trim().toUpperCase();
+    setVerifyingTicker((prev) => new Set([...prev, tempId]));
+    try {
+      const res = await api.get(`/prices?symbols=${t}`);
+      const price = res.data?.prices?.[t]?.price || res.data?.prices?.[t] || 0;
+      setVerifiedPrices((prev) => ({ ...prev, [tempId]: { ticker: t, price: Number(price) } }));
+      // Auto-set mappedSymbol so the save logic uses this ticker for price lookups
+      setItems((prev) =>
+        prev.map((it) =>
+          it.tempId === tempId
+            ? { ...it, priceAction: 'mapped', mappedSymbol: t }
+            : it
+        )
+      );
+    } catch (err) {
+      console.warn('Verify ticker failed:', err.message);
+      setVerifiedPrices((prev) => ({ ...prev, [tempId]: { ticker: t, price: 0, error: true } }));
+    } finally {
+      setVerifyingTicker((prev) => { const n = new Set(prev); n.delete(tempId); return n; });
+    }
   };
 
   // Bulk actions for all items
@@ -313,7 +330,7 @@ export const ExtractionReviewModal = ({
     try {
       const res = await api.post('/holdings/batch', {
         holdings: items,
-        defaultWalletId: defaultWalletId || null,
+        walletId: selectedWalletId || null,
       });
       onSaveSuccess(res.data.holdings);
       onClose();
@@ -353,27 +370,32 @@ export const ExtractionReviewModal = ({
             <p className="text-xs dark:text-slate-400 text-slate-500">
               {manualFallback
                 ? "Auto-extraction couldn't parse the screenshot. Use the raw text below as reference and add holdings manually."
-                : `Extracted ${items.length} holding${items.length === 1 ? '' : 's'}. Review screenshot prices, resolve any live market mismatches, and assign target wallet.`
+                : `Extracted ${items.length} holding${items.length === 1 ? '' : 's'}. Review screenshot prices, resolve any live market mismatches, and confirm additions.`
               }
             </p>
           </div>
 
-          {/* Bulk Target Wallet Selector */}
-          {wallets.length > 0 && (
-            <div className="flex items-center space-x-2 dark:bg-slate-900/80 bg-slate-100 px-3 py-2 rounded-xl border dark:border-slate-800 border-slate-300 shadow-inner">
-              <span className="text-xs font-semibold dark:text-slate-300 text-slate-700 whitespace-nowrap">Target Wallet:</span>
-              <select
-                value={defaultWalletId}
-                onChange={(e) => setDefaultWalletId(e.target.value)}
-                className="dark:bg-slate-950 bg-white dark:text-white text-slate-900 text-xs px-2.5 py-1.5 rounded-lg border dark:border-slate-700 border-slate-300 outline-none cursor-pointer"
-              >
-                <option value="">Unassigned / Default</option>
-                {wallets.map((w) => (
-                  <option key={w._id} value={w._id}>
-                    {w.name} ({w.type})
-                  </option>
-                ))}
-              </select>
+          {/* Destination Wallet Selector in Header */}
+          {wallets && wallets.length > 0 && (
+            <div className="flex items-center space-x-2 self-start sm:self-center mr-10 sm:mr-12 bg-cyan-500/10 dark:bg-cyan-500/15 border border-cyan-500/30 rounded-xl px-3.5 py-2 shadow-xs">
+              <Wallet className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 uppercase tracking-wider">
+                  Target Wallet
+                </span>
+                <select
+                  value={selectedWalletId}
+                  onChange={(e) => setSelectedWalletId(e.target.value)}
+                  className="bg-transparent text-xs font-extrabold dark:text-white text-slate-900 border-none outline-none cursor-pointer p-0 pr-2"
+                >
+                  <option value="" className="dark:bg-slate-900 bg-white">None (Unassigned Portfolio)</option>
+                  {wallets.map((w) => (
+                    <option key={w._id} value={w._id} className="dark:bg-slate-900 bg-white">
+                      {w.name} ({w.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
         </div>
@@ -444,10 +466,6 @@ export const ExtractionReviewModal = ({
                   <span>Symbol</span>
                   {renderSortIndicator('symbol')}
                 </th>
-                <th onClick={() => handleSort('chain')} className="p-3 cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
-                  <span>Chain / Network</span>
-                  {renderSortIndicator('chain')}
-                </th>
                 <th onClick={() => handleSort('quantity')} className="p-3 text-right cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
                   <span>Quantity</span>
                   {renderSortIndicator('quantity')}
@@ -461,10 +479,6 @@ export const ExtractionReviewModal = ({
                 </th>
                 <th className="p-3">
                   <span>Price Strategy</span>
-                </th>
-                <th onClick={() => handleSort('walletOrAccount')} className="p-3 cursor-pointer dark:hover:text-white hover:text-slate-900 transition group">
-                  <span>Wallet / Account</span>
-                  {renderSortIndicator('walletOrAccount')}
                 </th>
                 <th className="p-3 text-center">Remove</th>
               </tr>
@@ -504,17 +518,6 @@ export const ExtractionReviewModal = ({
                         onChange={(e) => handleFieldChange(item.tempId, 'symbol', e.target.value)}
                         placeholder="BTC"
                         className="w-16 glass-input rounded-lg px-2 py-1 text-xs font-mono font-bold uppercase text-cyan-600 dark:text-cyan-300"
-                      />
-                    </td>
-
-                    {/* Chain / Network */}
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        value={item.chain || ''}
-                        onChange={(e) => handleFieldChange(item.tempId, 'chain', e.target.value)}
-                        placeholder="Arbitrum, Ethereum"
-                        className="w-24 glass-input rounded-lg px-2 py-1 text-xs"
                       />
                     </td>
 
@@ -600,6 +603,48 @@ export const ExtractionReviewModal = ({
                           </div>
                         )}
 
+                        {/* Live Price Verification UI — shown when strategy is 'live' */}
+                        {item.priceAction === 'live' && (
+                          <div className="mt-1 flex flex-col gap-1">
+                            <div className="flex items-center space-x-1">
+                              <span className="text-[10px] text-slate-400 shrink-0">Verify ticker:</span>
+                              <input
+                                type="text"
+                                value={item.verifyTicker || ''}
+                                onChange={(e) => handleFieldChange(item.tempId, 'verifyTicker', e.target.value.toUpperCase())}
+                                placeholder="e.g. BTC"
+                                className="w-16 px-1.5 py-0.5 rounded text-xs uppercase font-mono font-bold border border-cyan-500/40 dark:bg-slate-950 bg-white text-cyan-600 dark:text-cyan-400"
+                                onKeyDown={(e) => e.key === 'Enter' && handleVerifyTicker(item.tempId, item.verifyTicker)}
+                              />
+                              <button
+                                type="button"
+                                disabled={verifyingTicker.has(item.tempId) || !item.verifyTicker?.trim()}
+                                onClick={() => handleVerifyTicker(item.tempId, item.verifyTicker)}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-700 dark:text-cyan-300 border border-cyan-500/40 transition cursor-pointer disabled:opacity-40 shrink-0"
+                              >
+                                {verifyingTicker.has(item.tempId) ? '...' : 'Verify'}
+                              </button>
+                            </div>
+                            {verifiedPrices[item.tempId] && (
+                              <div className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[10px] font-semibold border ${
+                                verifiedPrices[item.tempId].error
+                                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-500'
+                                  : verifiedPrices[item.tempId].price > 0
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-600'
+                              }`}>
+                                {verifiedPrices[item.tempId].error ? (
+                                  <span>❌ Fetch failed for {verifiedPrices[item.tempId].ticker}</span>
+                                ) : verifiedPrices[item.tempId].price > 0 ? (
+                                  <span>✅ {verifiedPrices[item.tempId].ticker}: {formatUSD(verifiedPrices[item.tempId].price)} — mapped!</span>
+                                ) : (
+                                  <span>⚠️ {verifiedPrices[item.tempId].ticker}: unlisted ($0)</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Inline Custom Price Input */}
                         {item.priceAction === 'custom' && (
                           <div className="flex items-center space-x-1 mt-0.5">
@@ -615,17 +660,6 @@ export const ExtractionReviewModal = ({
                           </div>
                         )}
                       </div>
-                    </td>
-
-                    {/* Wallet / Account */}
-                    <td className="p-2">
-                      <input
-                        type="text"
-                        value={item.walletOrAccount || ''}
-                        onChange={(e) => handleFieldChange(item.tempId, 'walletOrAccount', e.target.value)}
-                        placeholder="Binance"
-                        className="w-20 glass-input rounded-lg px-2 py-1 text-xs"
-                      />
                     </td>
 
                     {/* Remove Button */}

@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { assetType, symbol, quantity, avgBuyPrice, walletId, walletOrAccount, chain, notes } = req.body;
+    const { assetType, symbol, quantity, avgBuyPrice, walletId, notes } = req.body;
 
     if (!symbol || quantity === undefined || quantity < 0) {
       return res.status(400).json({ message: 'Valid symbol and non-negative quantity are required' });
@@ -48,8 +48,8 @@ router.post('/', async (req, res) => {
       quantity: Number(quantity),
       avgBuyPrice: parsedBuyPrice,
       walletId: walletId || null,
-      walletOrAccount: walletOrAccount ? walletOrAccount.trim() : '',
-      chain: chain ? chain.trim() : '',
+      walletOrAccount: '',
+      chain: '',
       notes: notes ? notes.trim() : '',
     });
 
@@ -67,7 +67,7 @@ router.post('/', async (req, res) => {
  */
 router.post('/batch', async (req, res) => {
   try {
-    const { holdings, defaultWalletId } = req.body;
+    const { holdings, walletId } = req.body;
 
     if (!Array.isArray(holdings) || holdings.length === 0) {
       return res.status(400).json({ message: 'Holdings array is required' });
@@ -121,9 +121,9 @@ router.post('/batch', async (req, res) => {
         symbol: (item.symbol || 'UNKNOWN').trim().toUpperCase(),
         quantity: Number(item.quantity) || 0,
         avgBuyPrice: buyPrice,
-        walletId: item.walletId || defaultWalletId || null,
-        walletOrAccount: item.walletOrAccount ? item.walletOrAccount.trim() : 'AI Extraction',
-        chain: item.chain ? item.chain.trim() : '',
+        walletId: item.walletId || walletId || null,
+        walletOrAccount: '',
+        chain: '',
         notes: item.notes ? item.notes.trim() : 'Imported via Screenshot AI Extraction',
       };
     });

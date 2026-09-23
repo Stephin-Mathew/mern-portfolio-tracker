@@ -5,11 +5,11 @@ import { X, Copy, Check, ClipboardPaste, AlertCircle, Braces, ArrowRight, Lightb
  * The extraction prompt — mirrors the server-side prompt in geminiExtract.js.
  * Kept in sync manually; any changes to the server prompt should be reflected here.
  */
-const EXTRACTION_PROMPT = `You are an expert financial OCR assistant. Analyze the provided exchange/wallet screenshot(s) and extract all asset holdings into a single valid JSON array.
+const EXTRACTION_PROMPT = `You are an expert financial OCR assistant. Analyze the provided screenshot(s) and extract all asset holdings into a single valid JSON array.
 
 STRICT RULES:
 1. Return ONLY a raw JSON array. Do NOT wrap in markdown backticks, no \`\`\`json blocks, no prose.
-2. Merge holdings across multiple images if the same symbol appears — sum the quantities.
+2. Do NOT merge, combine, or sum holdings with the same ticker/symbol. If the same coin/symbol appears multiple times (whether across multiple images or multiple entries/rows in the same screenshot), extract EACH occurrence as a separate holding entry in the JSON array with its own individual quantity and price.
 3. Format each object exactly as follows:
 [
   {
@@ -18,15 +18,14 @@ STRICT RULES:
     "extractedPrice": 61234.50,
     "totalValue": 2755.55,
     "avgBuyPrice": null,
-    "assetType": "crypto",
-    "walletOrAccount": "Binance"
+    "assetType": "crypto"
   }
 ]
 4. "assetType" must be one of: "crypto", "stock", "cash".
-5. "symbol" must be the uppercase ticker symbol (e.g. BTC, ETH, AAPL).
+5. "symbol" must be the exact uppercase ticker symbol shown on screen (e.g. BTC, ETH, BITCOIN, PEPE, SUI, AAPL). Do NOT convert or normalize token symbols (for example, if the screen displays "BITCOIN", do NOT change it to "BTC" unless the ticker "BTC" is explicitly written on the screen).
 6. "quantity" must be a clean number (e.g. 0.045, not "0.045 BTC").
-7. "extractedPrice" is the unit price / rate in USD or local currency shown on the screenshot for this asset (e.g. 61234.50). If not directly shown but total value and quantity are visible, compute totalValue / quantity. If neither is available, set to null.
-8. "totalValue" is the total fiat/USD valuation of this holding visible in the screenshot (e.g. 2755.55). If not visible, set to null.
+7. "extractedPrice" is the unit price / rate in USD or local currency shown on the screenshot for this asset (e.g. 61234.50). If unit price is not directly shown but total value and quantity are visible, ALWAYS calculate unit price as totalValue / quantity. Never leave null if totalValue and quantity are visible.
+8. "totalValue" is the total fiat/USD valuation of this holding visible in the screenshot (e.g. 2755.55). If not shown but unit price and quantity are visible, calculate unit price * quantity.
 9. "avgBuyPrice" should only be included for stocks if visible (otherwise 0). For crypto/cash set to null.
 10. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
 
@@ -123,8 +122,8 @@ const validatePastedJson = (jsonText) => {
       totalValue,
       avgBuyPrice,
       assetType,
-      walletOrAccount: item.walletOrAccount ? String(item.walletOrAccount).trim() : 'JSON Paste',
-      notes: item.notes ? String(item.notes).trim() : 'Pasted from external LLM',
+      walletOrAccount: item.walletOrAccount ? String(item.walletOrAccount).trim() : '',
+      notes: item.notes ? String(item.notes).trim() : '',
     });
   });
 
