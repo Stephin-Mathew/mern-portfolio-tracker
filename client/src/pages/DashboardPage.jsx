@@ -96,6 +96,7 @@ export const DashboardPage = ({
         onUpdatePrice={onUpdatePrice}
         onResetPrice={onResetPrice}
         rowStatuses={rowStatuses}
+        hideBuyPrice={activeTab === 'crypto'}
       />
     </div>
   );

@@ -282,6 +282,8 @@ export const WalletDetailPage = ({
           onUpdatePrice={onUpdatePrice}
           onResetPrice={onResetPrice}
           rowStatuses={rowStatuses}
+          walletType={wallet?.type}
+          hideBuyPrice={wallet?.type === 'crypto'}
         />
       </div>
     </div>

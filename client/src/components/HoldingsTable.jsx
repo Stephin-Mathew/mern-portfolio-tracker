@@ -28,6 +28,8 @@ export const HoldingsTable = ({
   onUpdatePrice,
   onResetPrice,
   rowStatuses = {},
+  walletType,
+  hideBuyPrice: hideBuyPriceProp,
 }) => {
 
   // Price Edit Modal state
@@ -59,6 +61,17 @@ export const HoldingsTable = ({
       [symbol]: !prev[symbol],
     }));
   };
+
+  // Determine if Buy Price column should be shown (e.g. hidden in crypto wallets or when no stocks exist)
+  const showBuyPrice = useMemo(() => {
+    if (hideBuyPriceProp !== undefined) {
+      return !hideBuyPriceProp;
+    }
+    if (walletType === 'crypto') {
+      return false;
+    }
+    return holdings.some((h) => h.assetType === 'stock');
+  }, [hideBuyPriceProp, walletType, holdings]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -353,13 +366,15 @@ export const HoldingsTable = ({
                 <span>Total Quantity</span>
                 {renderSortIndicator('quantity')}
               </th>
-              <th
-                onClick={() => handleSort('avgBuyPrice')}
-                className="py-3.5 px-4 text-right cursor-pointer dark:hover:text-white hover:text-slate-900 transition group"
-              >
-                <span>Buy Price (Stocks)</span>
-                {renderSortIndicator('avgBuyPrice')}
-              </th>
+              {showBuyPrice && (
+                <th
+                  onClick={() => handleSort('avgBuyPrice')}
+                  className="py-3.5 px-4 text-right cursor-pointer dark:hover:text-white hover:text-slate-900 transition group"
+                >
+                  <span>Buy Price (Stocks)</span>
+                  {renderSortIndicator('avgBuyPrice')}
+                </th>
+              )}
               <th
                 onClick={() => handleSort('livePrice')}
                 className="py-3.5 px-4 text-right cursor-pointer dark:hover:text-white hover:text-slate-900 transition group"
@@ -480,34 +495,36 @@ export const HoldingsTable = ({
                     </td>
 
                     {/* Avg Buy Price (Stocks Only) */}
-                    <td className="py-4 px-4 text-right font-mono dark:text-slate-300 text-slate-700">
-                      {h.assetType === 'stock' ? (
-                        editingCell?.id === h._id && editingCell?.field === 'avgBuyPrice' ? (
-                          <input
-                            type="number"
-                            step="any"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={() => handleCellSave(h, 'avgBuyPrice')}
-                            onKeyDown={(e) => handleKeyDown(e, h, 'avgBuyPrice')}
-                            autoFocus
-                            className="w-24 px-2 py-1 rounded dark:bg-slate-900 bg-white border border-cyan-500 text-right text-cyan-600 dark:text-cyan-300 font-mono text-xs shadow-xs"
-                          />
+                    {showBuyPrice && (
+                      <td className="py-4 px-4 text-right font-mono dark:text-slate-300 text-slate-700">
+                        {h.assetType === 'stock' ? (
+                          editingCell?.id === h._id && editingCell?.field === 'avgBuyPrice' ? (
+                            <input
+                              type="number"
+                              step="any"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={() => handleCellSave(h, 'avgBuyPrice')}
+                              onKeyDown={(e) => handleKeyDown(e, h, 'avgBuyPrice')}
+                              autoFocus
+                              className="w-24 px-2 py-1 rounded dark:bg-slate-900 bg-white border border-cyan-500 text-right text-cyan-600 dark:text-cyan-300 font-mono text-xs shadow-xs"
+                            />
+                          ) : (
+                            <span
+                              onClick={() => handleCellClick(h, 'avgBuyPrice', h.avgBuyPrice)}
+                              className="cursor-pointer hover:text-cyan-600 dark:hover:text-cyan-300 transition px-2 py-1 rounded dark:hover:bg-slate-800/60 hover:bg-slate-200/70"
+                              title="Click to edit stock buy price"
+                            >
+                              {formatUSD(h.avgBuyPrice)}
+                            </span>
+                          )
                         ) : (
-                          <span
-                            onClick={() => handleCellClick(h, 'avgBuyPrice', h.avgBuyPrice)}
-                            className="cursor-pointer hover:text-cyan-600 dark:hover:text-cyan-300 transition px-2 py-1 rounded dark:hover:bg-slate-800/60 hover:bg-slate-200/70"
-                            title="Click to edit stock buy price"
-                          >
-                            {formatUSD(h.avgBuyPrice)}
+                          <span className="text-xs dark:text-slate-500 text-slate-400 italic">
+                            {h.assetType === 'crypto' ? 'Airdrop / Live' : '—'}
                           </span>
-                        )
-                      ) : (
-                        <span className="text-xs dark:text-slate-500 text-slate-400 italic">
-                          {h.assetType === 'crypto' ? 'Airdrop / Live' : '—'}
-                        </span>
-                      )}
-                    </td>
+                        )}
+                      </td>
+                    )}
 
                     {/* Live Price */}
                     <td className="py-4 px-4 text-right font-mono font-medium dark:text-slate-200 text-slate-800">
@@ -655,15 +672,17 @@ export const HoldingsTable = ({
                     </td>
 
                     {/* Weighted Avg Buy Price (Stocks Only) */}
-                    <td className="py-4 px-4 text-right font-mono dark:text-slate-300 text-slate-700">
-                      {group.assetType === 'stock' && group.weightedAvgBuyPrice !== null ? (
-                        formatUSD(group.weightedAvgBuyPrice)
-                      ) : (
-                        <span className="text-xs dark:text-slate-500 text-slate-400 italic">
-                          {group.assetType === 'crypto' ? 'Airdrop / Live' : '—'}
-                        </span>
-                      )}
-                    </td>
+                    {showBuyPrice && (
+                      <td className="py-4 px-4 text-right font-mono dark:text-slate-300 text-slate-700">
+                        {group.assetType === 'stock' && group.weightedAvgBuyPrice !== null ? (
+                          formatUSD(group.weightedAvgBuyPrice)
+                        ) : (
+                          <span className="text-xs dark:text-slate-500 text-slate-400 italic">
+                            {group.assetType === 'crypto' ? 'Airdrop / Live' : '—'}
+                          </span>
+                        )}
+                      </td>
+                    )}
 
                     {/* Live Market Price */}
                     <td className="py-4 px-4 text-right font-mono font-medium dark:text-slate-200 text-slate-800">
@@ -750,7 +769,7 @@ export const HoldingsTable = ({
                   {/* Expanded Accordion Sub-Table Row */}
                   {isExpanded && (
                     <tr>
-                      <td colSpan={8} className="p-0 dark:bg-[#090d16] bg-slate-50 border-y dark:border-cyan-500/20 border-cyan-500/30">
+                      <td colSpan={showBuyPrice ? 8 : 7} className="p-0 dark:bg-[#090d16] bg-slate-50 border-y dark:border-cyan-500/20 border-cyan-500/30">
                         <div className="p-4 pl-10 space-y-2">
                           <div className="text-xs font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider mb-2 flex items-center space-x-2">
                             <Layers className="w-4 h-4" />
@@ -762,7 +781,9 @@ export const HoldingsTable = ({
                               <tr>
                                 <th className="p-2.5">Split Entry</th>
                                 <th className="p-2.5 text-right">Quantity (% Share)</th>
-                                <th className="p-2.5 text-right">{group.assetType === 'stock' ? 'Buy Price' : 'Price Status'}</th>
+                                {showBuyPrice && group.assetType === 'stock' && (
+                                  <th className="p-2.5 text-right">Buy Price</th>
+                                )}
                                 <th className="p-2.5 text-right">Value</th>
                                 <th className="p-2.5 text-right">P&L ({getTimeframeLabel()})</th>
                                 <th className="p-2.5 text-center">Actions</th>
@@ -845,9 +866,9 @@ export const HoldingsTable = ({
                                     </td>
 
                                     {/* Buy Price or Status */}
-                                    <td className="p-2.5 text-right font-mono dark:text-slate-300 text-slate-700">
-                                      {subItem.assetType === 'stock' ? (
-                                        editingCell?.id === subItem._id && editingCell?.field === 'avgBuyPrice' ? (
+                                    {showBuyPrice && group.assetType === 'stock' && (
+                                      <td className="p-2.5 text-right font-mono dark:text-slate-300 text-slate-700">
+                                        {editingCell?.id === subItem._id && editingCell?.field === 'avgBuyPrice' ? (
                                           <input
                                             type="number"
                                             step="any"
@@ -866,11 +887,9 @@ export const HoldingsTable = ({
                                           >
                                             {formatUSD(subItem.avgBuyPrice)}
                                           </span>
-                                        )
-                                      ) : (
-                                        <span className="text-xs dark:text-slate-500 text-slate-400 italic">Live Tracking</span>
-                                      )}
-                                    </td>
+                                        )}
+                                      </td>
+                                    )}
 
                                     {/* Value */}
                                     <td className="p-2.5 text-right font-mono font-bold dark:text-white text-slate-900">
