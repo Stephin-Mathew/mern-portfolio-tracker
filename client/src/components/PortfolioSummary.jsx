@@ -38,6 +38,7 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
   let totalStockCost = 0;
   let cryptoValue = 0;
   let stockValue = 0;
+  let mutualFundValue = 0;
   let cashValue = 0;
 
   let total24hPnL = 0;
@@ -75,13 +76,17 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
 
       const start7 = p / (1 + ch7 / 100);
       total7dPnL += qty * (p - start7);
-    } else if (h.assetType === 'stock') {
-      stockValue += val;
+    } else if (h.assetType === 'stock' || h.assetType === 'mutual_fund') {
+      if (h.assetType === 'stock') {
+        stockValue += val;
+      } else {
+        mutualFundValue += val;
+      }
       const cost = qty * (Number(h.avgBuyPrice) || 0);
       totalStockCost += cost;
       stockTotalPnL += (val - cost);
 
-      // Stock daily/7d contribution
+      // Stock / MF daily/7d contribution
       const start24 = p / (1 + ch24 / 100);
       total24hPnL += qty * (p - start24);
       const start7 = p / (1 + ch7 / 100);
@@ -110,6 +115,7 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
 
   const cryptoPct = totalValue > 0 ? (cryptoValue / totalValue) * 100 : 0;
   const stockPct = totalValue > 0 ? (stockValue / totalValue) * 100 : 0;
+  const mutualFundPct = totalValue > 0 ? (mutualFundValue / totalValue) * 100 : 0;
   const cashPct = totalValue > 0 ? (cashValue / totalValue) * 100 : 0;
 
   const formatUSD = (num) =>
@@ -368,12 +374,17 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
                 title={`Stocks: ${stockPct.toFixed(1)}%`}
               />
               <div
+                style={{ width: `${mutualFundPct}%` }}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                title={`Mutual Funds: ${mutualFundPct.toFixed(1)}%`}
+              />
+              <div
                 style={{ width: `${cashPct}%` }}
                 className="bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
                 title={`Cash: ${cashPct.toFixed(1)}%`}
               />
             </div>
-            <div className="flex items-center justify-between text-xs dark:text-slate-400 text-slate-600 pt-1 font-medium">
+            <div className="flex flex-wrap items-center justify-between text-xs dark:text-slate-400 text-slate-600 pt-1 font-medium gap-y-1">
               <div className="flex items-center space-x-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
                 <span>Crypto ({cryptoPct.toFixed(0)}%)</span>
@@ -382,6 +393,12 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
                 <span>Stocks ({stockPct.toFixed(0)}%)</span>
               </div>
+              {mutualFundPct > 0 && (
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span>Funds ({mutualFundPct.toFixed(0)}%)</span>
+                </div>
+              )}
               <div className="flex items-center space-x-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                 <span>Cash ({cashPct.toFixed(0)}%)</span>

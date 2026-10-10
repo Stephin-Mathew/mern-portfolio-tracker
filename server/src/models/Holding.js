@@ -10,7 +10,7 @@ const holdingSchema = new mongoose.Schema(
     },
     assetType: {
       type: String,
-      enum: ['crypto', 'stock', 'cash'],
+      enum: ['crypto', 'stock', 'mutual_fund', 'cash'],
       default: 'crypto',
       required: true,
     },
@@ -28,7 +28,7 @@ const holdingSchema = new mongoose.Schema(
     avgBuyPrice: {
       type: Number,
       required: function () {
-        return this.assetType === 'stock';
+        return this.assetType === 'stock' || this.assetType === 'mutual_fund';
       },
       min: [0, 'Buy price cannot be negative'],
       default: null,

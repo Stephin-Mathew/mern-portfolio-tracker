@@ -25,6 +25,7 @@ const portfolioSnapshotSchema = new mongoose.Schema(
     breakdown: {
       crypto: { type: Number, default: 0 },
       stock: { type: Number, default: 0 },
+      mutual_fund: { type: Number, default: 0 },
       cash: { type: Number, default: 0 },
     },
     timestamp: {

@@ -31,6 +31,9 @@ router.get('/', async (req, res) => {
             stockCount: {
               $sum: { $cond: [{ $eq: ['$assetType', 'stock'] }, 1, 0] },
             },
+            mutualFundCount: {
+              $sum: { $cond: [{ $eq: ['$assetType', 'mutual_fund'] }, 1, 0] },
+            },
             cashCount: {
               $sum: { $cond: [{ $eq: ['$assetType', 'cash'] }, 1, 0] },
             },
@@ -58,6 +61,7 @@ router.get('/', async (req, res) => {
         holdingCount: stat.holdingCount || 0,
         cryptoCount: stat.cryptoCount || 0,
         stockCount: stat.stockCount || 0,
+        mutualFundCount: stat.mutualFundCount || 0,
         cashCount: stat.cashCount || 0,
       };
     });
@@ -101,6 +105,7 @@ router.post('/', async (req, res) => {
         holdingCount: 0,
         cryptoCount: 0,
         stockCount: 0,
+        mutualFundCount: 0,
         cashCount: 0,
       },
     });

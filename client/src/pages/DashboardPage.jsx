@@ -53,7 +53,7 @@ export const DashboardPage = ({
     );
   }
 
-  // Filter holdings based on activeTab ('all' | 'crypto' | 'stock' | 'cash')
+  // Filter holdings based on activeTab ('all' | 'crypto' | 'stock' | 'mutual_fund' | 'cash')
   const filteredHoldings = holdings.filter((h) => {
     if (activeTab === 'all') return true;
     return h.assetType === activeTab;
@@ -63,6 +63,7 @@ export const DashboardPage = ({
     all: holdings.length,
     crypto: holdings.filter((h) => h.assetType === 'crypto').length,
     stock: holdings.filter((h) => h.assetType === 'stock').length,
+    mutual_fund: holdings.filter((h) => h.assetType === 'mutual_fund').length,
     cash: holdings.filter((h) => h.assetType === 'cash').length,
   };
 

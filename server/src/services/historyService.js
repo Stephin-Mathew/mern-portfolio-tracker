@@ -1,3 +1,4 @@
+import cron from 'node-cron';
 import { PortfolioSnapshot } from '../models/PortfolioSnapshot.js';
 import { Holding } from '../models/Holding.js';
 import { getPricesForSymbols } from './priceService.js';
@@ -19,6 +20,7 @@ export const captureUserSnapshot = async (userId) => {
     let totalCost = 0;
     let cryptoVal = 0;
     let stockVal = 0;
+    let mutualFundVal = 0;
     let cashVal = 0;
 
     holdings.forEach((h) => {
@@ -32,31 +34,34 @@ export const captureUserSnapshot = async (userId) => {
       }
 
       const val = h.quantity * price;
-      // Cost basis is strictly tracked for stocks
-      const cost = h.assetType === 'stock' ? h.quantity * (h.avgBuyPrice || 0) : 0;
+      // Cost basis is strictly tracked for stocks and mutual funds
+      const cost = (h.assetType === 'stock' || h.assetType === 'mutual_fund') ? h.quantity * (h.avgBuyPrice || 0) : 0;
 
       totalValue += val;
       totalCost += cost;
 
       if (h.assetType === 'crypto') cryptoVal += val;
       else if (h.assetType === 'stock') stockVal += val;
+      else if (h.assetType === 'mutual_fund') mutualFundVal += val;
       else if (h.assetType === 'cash') cashVal += val;
     });
 
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Use an hourly window so each hour gets its own snapshot (not just one per day)
+    const hourStart = new Date(now);
+    hourStart.setMinutes(0, 0, 0);
 
-    // Check if snapshot recorded today; update or create
+    // Check if snapshot recorded this hour; update or create
     const existing = await PortfolioSnapshot.findOne({
       userId,
-      timestamp: { $gte: todayStart },
+      timestamp: { $gte: hourStart },
     });
 
     if (existing) {
       existing.totalValue = totalValue;
       existing.totalCost = totalCost;
       existing.totalPnL = totalValue - totalCost;
-      existing.breakdown = { crypto: cryptoVal, stock: stockVal, cash: cashVal };
+      existing.breakdown = { crypto: cryptoVal, stock: stockVal, mutual_fund: mutualFundVal, cash: cashVal };
       existing.timestamp = now;
       await existing.save();
       return existing;
@@ -67,7 +72,7 @@ export const captureUserSnapshot = async (userId) => {
       totalValue,
       totalCost,
       totalPnL: totalValue - totalCost,
-      breakdown: { crypto: cryptoVal, stock: stockVal, cash: cashVal },
+      breakdown: { crypto: cryptoVal, stock: stockVal, mutual_fund: mutualFundVal, cash: cashVal },
       timestamp: now,
     });
 
@@ -113,6 +118,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
   let currentCost = 0;
   let cryptoVal = 0;
   let stockVal = 0;
+  let mutualFundVal = 0;
   let cashVal = 0;
 
   holdings.forEach((h) => {
@@ -125,12 +131,13 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
     }
 
     const v = h.quantity * p;
-    const c = h.assetType === 'stock' ? h.quantity * (h.avgBuyPrice || 0) : 0;
+    const c = (h.assetType === 'stock' || h.assetType === 'mutual_fund') ? h.quantity * (h.avgBuyPrice || 0) : 0;
     currentVal += v;
     currentCost += c;
 
     if (h.assetType === 'crypto') cryptoVal += v;
     else if (h.assetType === 'stock') stockVal += v;
+    else if (h.assetType === 'mutual_fund') mutualFundVal += v;
     else if (h.assetType === 'cash') cashVal += v;
   });
 
@@ -145,6 +152,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
       totalPnL: s.totalPnL,
       cryptoValue: s.breakdown?.crypto || 0,
       stockValue: s.breakdown?.stock || 0,
+      mutualFundValue: s.breakdown?.mutual_fund || 0,
       cashValue: s.breakdown?.cash || 0,
     }));
 
@@ -155,6 +163,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
     last.totalPnL = Number((currentVal - currentCost).toFixed(2));
     last.cryptoValue = Number(cryptoVal.toFixed(2));
     last.stockValue = Number(stockVal.toFixed(2));
+    last.mutualFundValue = Number(mutualFundVal.toFixed(2));
     last.cashValue = Number(cashVal.toFixed(2));
   } else {
     // No snapshots yet — show a single point at current value (portfolio just created)
@@ -166,6 +175,7 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
         totalPnL: Number((currentVal - currentCost).toFixed(2)),
         cryptoValue: Number(cryptoVal.toFixed(2)),
         stockValue: Number(stockVal.toFixed(2)),
+        mutualFundValue: Number(mutualFundVal.toFixed(2)),
         cashValue: Number(cashVal.toFixed(2)),
       },
     ];
@@ -213,4 +223,41 @@ export const clearPortfolioHistory = async (userId) => {
   const result = await PortfolioSnapshot.deleteMany({ userId });
   console.log(`[history] 🗑️ Cleared ${result.deletedCount} portfolio snapshot(s) for user ${userId}`);
   return { deletedCount: result.deletedCount };
+};
+
+/**
+ * Capture a portfolio snapshot for every user who has at least one holding.
+ * Safe to call from a background cron — failures for one user don't block others.
+ */
+export const captureAllUsersSnapshot = async () => {
+  try {
+    const userIds = await Holding.distinct('userId');
+    if (!userIds.length) {
+      console.log('[snapshot-cron] No users with holdings — skipping.');
+      return;
+    }
+
+    console.log(`[snapshot-cron] 📸 Capturing snapshots for ${userIds.length} user(s)...`);
+
+    const results = await Promise.allSettled(
+      userIds.map((uid) => captureUserSnapshot(uid))
+    );
+
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    console.log(`[snapshot-cron] ✅ Done — ${results.length - failed} succeeded, ${failed} failed.`);
+  } catch (err) {
+    console.error('[snapshot-cron] Error during all-users snapshot:', err.message);
+  }
+};
+
+/**
+ * Initialize background cron job to capture portfolio snapshots every hour.
+ * Fires at minute 0 of every hour (00:00, 01:00, 02:00, ...).
+ */
+export const initSnapshotCron = () => {
+  console.log('⏱️ Initializing Portfolio Snapshot cron job (runs every hour at :00)...');
+  cron.schedule('0 * * * *', async () => {
+    console.log(`[snapshot-cron] 🕐 Hourly snapshot triggered at ${new Date().toISOString()}`);
+    await captureAllUsersSnapshot();
+  });
 };

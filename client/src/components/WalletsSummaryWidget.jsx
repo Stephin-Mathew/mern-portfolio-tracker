@@ -51,6 +51,12 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num);
 
+  const formatINR = (num) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(num);
+
+  const formatValue = (num, walletType) =>
+    walletType === 'stock' ? formatINR(num) : formatUSD(num);
+
   // Sort wallets descending by total dollar balance (highest $ count account first)
   const sortedWalletsWithValues = useMemo(() => {
     return wallets
@@ -163,7 +169,7 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
                   </div>
 
                   <div className="text-xl font-extrabold dark:text-white text-slate-900 font-heading mb-1">
-                    {formatUSD(walletVal)}
+                    {formatValue(walletVal, wallet.type)}
                   </div>
                 </div>
 

@@ -43,6 +43,7 @@ export const WalletDetailPage = ({
   let totalStockCost = 0;
   let cryptoVal = 0;
   let stockVal = 0;
+  let mutualFundVal = 0;
   let cashVal = 0;
   let wallet24hPnL = 0;
 
@@ -72,8 +73,9 @@ export const WalletDetailPage = ({
       cryptoVal += val;
       const start24 = currentPrice / (1 + ch24 / 100);
       wallet24hPnL += qty * (currentPrice - start24);
-    } else if (h.assetType === 'stock') {
-      stockVal += val;
+    } else if (h.assetType === 'stock' || h.assetType === 'mutual_fund') {
+      if (h.assetType === 'stock') stockVal += val;
+      else mutualFundVal += val;
       const cost = qty * (Number(h.avgBuyPrice) || 0);
       totalStockCost += cost;
       const start24 = currentPrice / (1 + ch24 / 100);
@@ -99,6 +101,11 @@ export const WalletDetailPage = ({
 
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num);
+
+  const formatINR = (num) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(num);
+
+  const fmt = (num) => wallet?.type === 'stock' ? formatINR(num) : formatUSD(num);
 
   if (walletsLoading) {
     return (
@@ -217,7 +224,7 @@ export const WalletDetailPage = ({
           <div>
             <span className="text-xs dark:text-slate-400 text-slate-500 uppercase font-semibold">Wallet Net Worth</span>
             <div className="text-2xl sm:text-3xl font-extrabold dark:text-white text-slate-900 font-heading mt-1">
-              {formatUSD(totalValue)}
+              {fmt(totalValue)}
             </div>
             <span className="text-[11px] dark:text-slate-400 text-slate-500">Across {walletHoldings.length} assets</span>
           </div>
@@ -227,7 +234,7 @@ export const WalletDetailPage = ({
             <div className="flex items-baseline space-x-2 mt-1">
               <div className={`text-2xl sm:text-3xl font-extrabold font-heading ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {isPositive ? '+' : ''}
-                {formatUSD(wallet24hPnL)}
+                {fmt(wallet24hPnL)}
               </div>
               <div className={`text-xs font-bold px-2 py-0.5 rounded border ${isPositive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
                 {isPositive ? '+' : ''}
@@ -235,16 +242,17 @@ export const WalletDetailPage = ({
               </div>
             </div>
             <span className="text-[11px] dark:text-slate-400 text-slate-500">
-              {totalStockCost > 0 ? `Stock Invested: ${formatUSD(totalStockCost)}` : 'Market Live Tracking'}
+              {totalStockCost > 0 ? `Stock Invested: ${fmt(totalStockCost)}` : 'Market Live Tracking'}
             </span>
           </div>
 
           <div>
             <span className="text-xs dark:text-slate-400 text-slate-500 uppercase font-semibold">Asset Types</span>
             <div className="text-sm font-bold dark:text-white text-slate-900 mt-1 space-x-3 flex items-center">
-              {cryptoVal > 0 && <span className="text-cyan-600 dark:text-cyan-400">{formatUSD(cryptoVal)} Crypto</span>}
-              {stockVal > 0 && <span className="text-indigo-600 dark:text-indigo-400">{formatUSD(stockVal)} Stocks</span>}
-              {cashVal > 0 && <span className="text-emerald-600 dark:text-emerald-400">{formatUSD(cashVal)} Cash</span>}
+              {cryptoVal > 0 && <span className="text-cyan-600 dark:text-cyan-400">{fmt(cryptoVal)} Crypto</span>}
+              {stockVal > 0 && <span className="text-indigo-600 dark:text-indigo-400">{fmt(stockVal)} Stocks</span>}
+              {mutualFundVal > 0 && <span className="text-amber-600 dark:text-amber-400">{fmt(mutualFundVal)} Mutual Funds</span>}
+              {cashVal > 0 && <span className="text-emerald-600 dark:text-emerald-400">{fmt(cashVal)} Cash</span>}
               {totalValue === 0 && <span className="dark:text-slate-500 text-slate-400 text-xs">No assets recorded</span>}
             </div>
           </div>

@@ -59,7 +59,7 @@ export const WalletsPage = ({
         cryptoVal += val;
         const start24 = currentPrice / (1 + ch24 / 100);
         wallet24hPnL += qty * (currentPrice - start24);
-      } else if (h.assetType === 'stock') {
+      } else if (h.assetType === 'stock' || h.assetType === 'mutual_fund') {
         stockVal += val;
         const cost = qty * (Number(h.avgBuyPrice) || 0);
         totalCost += cost;
@@ -109,6 +109,12 @@ export const WalletsPage = ({
 
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num);
+
+  const formatINR = (num) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(num);
+
+  const formatValue = (num, walletType) =>
+    walletType === 'stock' ? formatINR(num) : formatUSD(num);
 
   if (loading) {
     return (
@@ -239,14 +245,14 @@ export const WalletsPage = ({
                   <div className="dark:bg-slate-900/60 bg-slate-50 rounded-2xl p-4 mb-4 border dark:border-slate-800/60 border-slate-200">
                     <div className="text-xs dark:text-slate-400 text-slate-500 mb-1">Total Valuation</div>
                     <div className="text-2xl font-extrabold dark:text-white text-slate-900 font-heading">
-                      {formatUSD(stats.totalValue)}
+                      {formatValue(stats.totalValue, wallet.type)}
                     </div>
                     {stats.count > 0 && (
                       <div className="mt-2 flex items-center justify-between text-xs">
                         <span className="dark:text-slate-400 text-slate-500">Unrealized P&L</span>
                         <span className={`font-mono font-bold ${isProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                           {isProfit ? '+' : ''}
-                          {formatUSD(stats.pnl)} ({isProfit ? '+' : ''}
+                          {formatValue(stats.pnl, wallet.type)} ({isProfit ? '+' : ''}
                           {stats.pnlPct.toFixed(2)}%)
                         </span>
                       </div>

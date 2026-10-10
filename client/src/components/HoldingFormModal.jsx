@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Coins, TrendingUp, DollarSign, Wallet } from 'lucide-react';
+import { X, Save, Coins, TrendingUp, DollarSign, Wallet, Layers } from 'lucide-react';
 
 export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, wallets = [], targetWalletId = '' }) => {
   const [formData, setFormData] = useState({
@@ -43,7 +43,7 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
     setError('');
 
     if (!formData.symbol.trim()) {
-      setError('Please enter an asset symbol (e.g., BTC, AAPL, USD)');
+      setError('Please enter an asset symbol or fund name (e.g., BTC, AAPL, CANBK)');
       return;
     }
 
@@ -52,8 +52,8 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
       return;
     }
 
-    if (formData.assetType === 'stock' && (!formData.avgBuyPrice || Number(formData.avgBuyPrice) < 0)) {
-      setError('Please enter a valid purchase price for stock holdings');
+    if ((formData.assetType === 'stock' || formData.assetType === 'mutual_fund') && (!formData.avgBuyPrice || Number(formData.avgBuyPrice) < 0)) {
+      setError(`Please enter a valid purchase price / NAV for ${formData.assetType === 'mutual_fund' ? 'mutual fund' : 'stock'} holdings`);
       return;
     }
 
@@ -65,7 +65,7 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
         quantity: Number(formData.quantity),
         walletId: formData.walletId || null,
         avgBuyPrice:
-          formData.assetType === 'stock'
+          (formData.assetType === 'stock' || formData.assetType === 'mutual_fund')
             ? formData.avgBuyPrice
               ? Number(formData.avgBuyPrice)
               : 0
@@ -96,7 +96,7 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
             {holdingToEdit ? 'Edit Asset Holding' : 'Add New Asset Holding'}
           </h2>
           <p className="text-xs dark:text-slate-400 text-slate-500 mt-1">
-            {holdingToEdit ? 'Update details of your existing portfolio entry' : 'Record a cryptocurrency, stock, or cash balance'}
+            {holdingToEdit ? 'Update details of your existing portfolio entry' : 'Record a cryptocurrency, stock, mutual fund, or cash balance'}
           </p>
         </div>
 
@@ -110,10 +110,11 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
           {/* Asset Type Selector */}
           <div>
             <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-2">Asset Type</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { type: 'crypto', label: 'Crypto', icon: Coins },
                 { type: 'stock', label: 'Stock', icon: TrendingUp },
+                { type: 'mutual_fund', label: 'Mutual Fund', icon: Layers },
                 { type: 'cash', label: 'Cash', icon: DollarSign },
               ].map(({ type, label, icon: Icon }) => (
                 <button
@@ -144,11 +145,11 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
-                Asset Ticker / Symbol *
+                {formData.assetType === 'mutual_fund' ? 'Scheme Name / Symbol *' : 'Asset Ticker / Symbol *'}
               </label>
               <input
                 type="text"
-                placeholder="e.g. BTC, ETH, AAPL"
+                placeholder={formData.assetType === 'mutual_fund' ? 'e.g. PARAG PARIKH FLEXI CAP' : 'e.g. BTC, AAPL, CANBK'}
                 value={formData.symbol}
                 onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
                 className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm uppercase font-mono font-bold"
@@ -171,16 +172,16 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
             </div>
           </div>
 
-          {/* Stock: Avg Buy Price */}
-          {formData.assetType === 'stock' && (
+          {/* Stock & Mutual Fund: Avg Buy Price */}
+          {(formData.assetType === 'stock' || formData.assetType === 'mutual_fund') && (
             <div>
               <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
-                Avg Buy Price ($) *
+                {formData.assetType === 'mutual_fund' ? 'Avg Purchase NAV / Price (₹) *' : 'Avg Buy Price ($ / ₹) *'}
               </label>
               <input
                 type="number"
                 step="any"
-                placeholder="e.g. 185.50"
+                placeholder={formData.assetType === 'mutual_fund' ? 'e.g. 85.50' : 'e.g. 185.50'}
                 value={formData.avgBuyPrice}
                 onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
                 className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm font-mono"

@@ -134,7 +134,7 @@ export const ExtractionReviewModal = ({
           mappedSymbol: '',
           customPrice: '',
           avgBuyPrice: 0,
-          assetType: 'crypto',
+          assetType: 'stock',
           notes: 'Manually entered from screenshot',
         },
       ]);
@@ -267,7 +267,7 @@ export const ExtractionReviewModal = ({
         mappedSymbol: '',
         customPrice: '',
         avgBuyPrice: 0,
-        assetType: 'crypto',
+        assetType: 'stock',
         notes: 'Manually added during review stage',
         verifyTicker: '',
       },
@@ -504,8 +504,9 @@ export const ExtractionReviewModal = ({
                         onChange={(e) => handleFieldChange(item.tempId, 'assetType', e.target.value)}
                         className="glass-input rounded-lg px-2 py-1 text-xs dark:bg-slate-900 bg-white dark:border-slate-700 border-slate-300 dark:text-white text-slate-900"
                       >
+                        <option value="stock">Stock / ETF</option>
+                        <option value="mutual_fund">Mutual Fund</option>
                         <option value="crypto">Crypto</option>
-                        <option value="stock">Stock</option>
                         <option value="cash">Cash</option>
                       </select>
                     </td>

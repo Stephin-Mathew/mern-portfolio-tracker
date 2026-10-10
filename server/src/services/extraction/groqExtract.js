@@ -23,30 +23,31 @@ export const extractWithGroq = async (rawText, contextText = '') => {
     ? `\nUSER CONTEXT (trust this information to improve accuracy):\n${contextText}\n`
     : '';
 
-  const systemPrompt = `You are an expert financial data parser. You will receive raw OCR text extracted from a screenshot. Parse all asset holdings into a valid JSON array.${contextSection}
+  const systemPrompt = `You are an expert financial OCR assistant. You will receive raw OCR text extracted from a screenshot of a stock / mutual fund brokerage "Holdings" screen. Parse all holdings into a valid JSON array.${contextSection}
 
 STRICT RULES:
 1. Return ONLY a raw JSON array. No markdown, no backticks, no explanation text.
-2. Do NOT merge, combine, or sum holdings with the same ticker/symbol. If the same coin/symbol appears multiple times, extract EACH occurrence as a separate holding entry in the JSON array with its own individual quantity and price.
+2. Do NOT merge, combine, or sum holdings with the same symbol/name. Extract EACH occurrence as a separate entry with its own individual quantity and prices.
 3. Format each object exactly as:
 [
   {
-    "symbol": "BTC",
-    "quantity": 0.045,
-    "extractedPrice": 61234.50,
-    "totalValue": 2755.55,
-    "avgBuyPrice": null,
-    "assetType": "crypto"
+    "symbol": "CANBK",
+    "quantity": 5,
+    "extractedPrice": 119.51,
+    "totalValue": 597.55,
+    "avgBuyPrice": 63.10,
+    "assetType": "stock"
   }
 ]
-4. "assetType" must be one of: "crypto", "stock", "cash".
-5. "symbol" must be the exact uppercase ticker symbol shown on screen (e.g. BTC, ETH, BITCOIN, PEPE, SUI, AAPL). Do NOT convert or normalize token symbols (for example, if the screen displays "BITCOIN", do NOT change it to "BTC" unless the ticker "BTC" is explicitly written on the screen).
-6. "quantity" must be a number (e.g. 0.045), not a string.
-7. "extractedPrice" is the unit price / rate shown on the screenshot for this asset (e.g. 61234.50). If not directly shown but total value and quantity are visible, ALWAYS calculate unit price as totalValue / quantity. Never leave null if totalValue and quantity are visible.
-8. "totalValue" is the total fiat/USD valuation of this holding visible in the screenshot. If not shown but unit price and quantity are visible, calculate unit price * quantity.
-9. "avgBuyPrice" is ONLY for stocks if visible (otherwise 0). For crypto/cash set to null.
-10. Skip any rows that are clearly totals, UI elements, or have zero/unknown quantity.
-11. If the OCR text is messy, do your best to extract meaningful holdings. Prefer partial correct data over returning nothing.`;
+4. "assetType" must be one of: "stock", "mutual_fund", "cash". Use "stock" for exchange-traded tickers and ETFs. Use "mutual_fund" for mutual fund schemes (names containing "FUND", "PLAN", "DIRECT", "ELSS", "INDEX FUND", etc.).
+5. "symbol": For stocks/ETFs use the exact uppercase ticker. For mutual funds use the full scheme name in uppercase (join multi-line names with single spaces).
+6. "quantity" is the number after "Qty." — a clean number, no text or commas.
+7. "extractedPrice" is the LTP (last traded price / current NAV). Remove commas (e.g. "5,591.15" becomes 5591.15).
+8. "totalValue" = quantity * LTP, rounded to 2 decimals. Calculate it — do not read it from the screen.
+9. "avgBuyPrice" is the number after "Buy avg." (remove commas). If not visible, use 0.
+10. Numbers may contain thousands separators — strip commas, output plain numbers, never strings.
+11. Skip holding rows where quantity or LTP is not fully visible, and skip all UI elements, totals, and header rows.
+12. If the OCR text is messy, do your best to extract meaningful holdings. Prefer partial correct data over returning nothing.`;
 
   const groq = new Groq({ apiKey });
 

@@ -10,6 +10,7 @@ import pricesRoutes from './routes/prices.js';
 import portfolioRoutes from './routes/portfolio.js';
 import extractRoutes from './routes/extract.js';
 import { initPriceCron } from './services/priceService.js';
+import { initSnapshotCron } from './services/historyService.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +68,7 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   await connectDB();
   initPriceCron();
+  initSnapshotCron();
   
   app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);

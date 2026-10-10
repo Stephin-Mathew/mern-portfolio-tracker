@@ -15,7 +15,7 @@ const priceCacheSchema = new mongoose.Schema(
     },
     assetType: {
       type: String,
-      enum: ['crypto', 'stock'],
+      enum: ['crypto', 'stock', 'mutual_fund'],
       default: 'crypto',
     },
     change24h: {

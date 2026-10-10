@@ -46,29 +46,33 @@ const buildExtractionPrompt = (contextText = '') => {
     ? `\nUSER CONTEXT (trust this information to improve accuracy):\n${contextText}\n`
     : '';
 
-  return `You are an expert financial OCR assistant. Analyze the provided screenshot(s) and extract all asset holdings into a single valid JSON array.${contextSection}
+  return `You are an expert financial OCR assistant. Analyze the provided screenshot(s) of a stock / mutual fund brokerage "Holdings" screen and extract all holdings into a single valid JSON array.${contextSection}
 
 STRICT RULES:
 1. Return ONLY a raw JSON array. Do NOT wrap in markdown backticks, no \`\`\`json blocks, no prose.
-2. Do NOT merge, combine, or sum holdings with the same ticker/symbol. If the same coin/symbol appears multiple times (whether across multiple images or multiple entries/rows in the same screenshot), extract EACH occurrence as a separate holding entry in the JSON array with its own individual quantity and price.
+2. Do NOT merge, combine, or sum holdings with the same symbol/name. If the same symbol appears multiple times (across multiple images or multiple rows in the same screenshot), extract EACH occurrence as a separate entry with its own individual quantity and prices.
 3. Format each object exactly as follows:
 [
   {
-    "symbol": "BTC",
-    "quantity": 0.045,
-    "extractedPrice": 61234.50,
-    "totalValue": 2755.55,
-    "avgBuyPrice": null,
-    "assetType": "crypto"
+    "symbol": "CANBK",
+    "quantity": 5,
+    "extractedPrice": 119.51,
+    "totalValue": 597.55,
+    "avgBuyPrice": 63.10,
+    "assetType": "stock"
   }
 ]
-4. "assetType" must be one of: "crypto", "stock", "cash".
-5. "symbol" must be the exact uppercase ticker symbol shown on screen (e.g. BTC, ETH, BITCOIN, PEPE, SUI, AAPL). Do NOT convert or normalize token symbols (for example, if the screen displays "BITCOIN", do NOT change it to "BTC" unless the ticker "BTC" is explicitly written on the screen).
-6. "quantity" must be a clean number (e.g. 0.045, not "0.045 BTC").
-7. "extractedPrice" is the unit price/rate shown on the screenshot for this asset (e.g. 61234.50). If unit price is not directly visible but total value and quantity are shown, ALWAYS calculate totalValue / quantity. Never leave null if totalValue and quantity are visible.
-8. "totalValue" is the total fiat/USD valuation of this holding visible in the screenshot (e.g. 2755.55). If not shown but unit price and quantity are visible, calculate unit price * quantity.
-9. "avgBuyPrice" should only be included for stocks if visible (otherwise 0). For crypto/cash set to null.
-10. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
+4. "assetType" must be one of: "stock", "mutual_fund", "cash". Use "stock" for exchange-traded tickers and ETFs (e.g. CANBK, INFY, NIFTYBEES). Use "mutual_fund" for mutual fund schemes (names containing "FUND", "PLAN", "DIRECT", "ELSS", "INDEX FUND", etc.).
+5. "symbol":
+   - For stocks/ETFs, use the exact uppercase ticker shown on screen (e.g. CANBK, CDSL, INFY, ITC, NIFTYBEES, TMCV, TMPV). Do NOT normalize or expand it.
+   - For mutual funds there is no ticker, so use the full scheme name exactly as shown, in uppercase. Names often wrap across 2-3 lines; join those lines into a single string with single spaces (e.g. "MOTILAL OSWAL NIFTY 200 MOMENTUM 30 INDEX FUND - DIRECT PLAN").
+6. "quantity" is the number after "Qty." as a clean number, with no text or commas. Keep all decimals exactly as shown (e.g. 17.960, 0.312, 504.215; whole numbers like 5 or 73 stay whole).
+7. "extractedPrice" is the LTP (last traded price / current NAV) shown on the right side of the "Invested" row. Remove commas (e.g. "5,591.15" becomes 5591.15).
+8. "totalValue" is the current market value of the holding. This screen does NOT show it directly, so calculate it as quantity * LTP, rounded to 2 decimals. Cross-check: it should be approximately equal to Invested + P&L amount. If they disagree noticeably, re-read the digits.
+9. "avgBuyPrice" is the number after "Buy avg." (remove commas). If not visible, use 0.
+10. Numbers may contain thousands separators (e.g. 1,261.90, 17,718.77). Strip commas and output plain numbers. Never output numbers as strings.
+11. Ignore everything that is not a holding row: status bar (time, battery, network), the "Holdings" title, "Last updated" line, Search/Sort controls, the P&L percentage and P&L amount (green/red numbers), and any partially cut-off row at the very top or bottom of the screen where quantity or LTP is not fully visible.
+12. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
 };
 
 /**

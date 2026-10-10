@@ -1,11 +1,12 @@
 import React from 'react';
-import { Layers, Coins, TrendingUp, Wallet } from 'lucide-react';
+import { Layers, Coins, TrendingUp, Wallet, PieChart } from 'lucide-react';
 
 export const AssetTypeTabs = ({ activeTab, setActiveTab, counts }) => {
   const tabs = [
     { id: 'all', label: 'All Holdings', icon: Layers, count: counts.all },
     { id: 'crypto', label: 'Crypto', icon: Coins, count: counts.crypto },
     { id: 'stock', label: 'Stocks', icon: TrendingUp, count: counts.stock },
+    { id: 'mutual_fund', label: 'Mutual Funds', icon: PieChart, count: counts.mutual_fund || 0 },
     { id: 'cash', label: 'Cash & Fiat', icon: Wallet, count: counts.cash },
   ];
 

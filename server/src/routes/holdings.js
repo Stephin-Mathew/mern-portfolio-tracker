@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
     }
 
     const holdingType = assetType || 'crypto';
-    const parsedBuyPrice = holdingType === 'stock'
+    const parsedBuyPrice = (holdingType === 'stock' || holdingType === 'mutual_fund')
       ? (avgBuyPrice !== undefined && avgBuyPrice !== null && avgBuyPrice !== '' ? Number(avgBuyPrice) : 0)
       : null;
 
@@ -111,7 +111,7 @@ router.post('/batch', async (req, res) => {
 
     const newHoldingsData = holdings.map((item) => {
       const hType = item.assetType || 'crypto';
-      const buyPrice = hType === 'stock'
+      const buyPrice = (hType === 'stock' || hType === 'mutual_fund')
         ? (item.avgBuyPrice !== undefined && item.avgBuyPrice !== null && item.avgBuyPrice !== '' ? Number(item.avgBuyPrice) : 0)
         : null;
 

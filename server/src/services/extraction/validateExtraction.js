@@ -16,7 +16,7 @@ export const validateExtractionResult = (data) => {
     return { valid: false, errors: ['Extraction returned an empty array'] };
   }
 
-  const VALID_ASSET_TYPES = ['crypto', 'stock', 'cash'];
+  const VALID_ASSET_TYPES = ['crypto', 'stock', 'mutual_fund', 'cash'];
 
   // Well-known stock tickers for type inference when assetType is missing/invalid
   const KNOWN_STOCKS = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ', 'AMD', 'NFLX', 'DIS', 'BA', 'V', 'JPM', 'WMT'];
@@ -49,12 +49,14 @@ export const validateExtractionResult = (data) => {
     if (!VALID_ASSET_TYPES.includes(assetType)) {
       if (KNOWN_CASH.includes(symbol)) assetType = 'cash';
       else if (KNOWN_STOCKS.includes(symbol)) assetType = 'stock';
+      // If symbol is long (>10 chars with spaces), likely a mutual fund name
+      else if (symbol.length > 10 && symbol.includes(' ')) assetType = 'mutual_fund';
       else assetType = 'crypto';
     }
 
-    // --- avgBuyPrice (only required for stocks) ---
+    // --- avgBuyPrice (for stocks and mutual funds) ---
     let avgBuyPrice = null;
-    if (assetType === 'stock') {
+    if (assetType === 'stock' || assetType === 'mutual_fund') {
       const rawPrice = item.avgBuyPrice !== undefined && item.avgBuyPrice !== null ? Number(item.avgBuyPrice) : 0;
       avgBuyPrice = isNaN(rawPrice) || rawPrice < 0 ? 0 : rawPrice;
     }
