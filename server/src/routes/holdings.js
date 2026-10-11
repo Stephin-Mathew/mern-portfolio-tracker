@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { assetType, symbol, quantity, avgBuyPrice, walletId, notes } = req.body;
+    const { assetType, symbol, quantity, avgBuyPrice, walletId, notes, mfSchemeCode, mfSchemeName, currency } = req.body;
 
     if (!symbol || quantity === undefined || quantity < 0) {
       return res.status(400).json({ message: 'Valid symbol and non-negative quantity are required' });
@@ -51,6 +51,10 @@ router.post('/', async (req, res) => {
       walletOrAccount: '',
       chain: '',
       notes: notes ? notes.trim() : '',
+      currency: currency ? currency.trim().toUpperCase() : ((holdingType === 'stock' || holdingType === 'mutual_fund') ? 'INR' : null),
+      // Mutual fund fields — stored for MFapi.in NAV lookups
+      mfSchemeCode: holdingType === 'mutual_fund' && mfSchemeCode ? String(mfSchemeCode).trim() : null,
+      mfSchemeName: holdingType === 'mutual_fund' && mfSchemeName ? mfSchemeName.trim() : null,
     });
 
     res.status(201).json({ message: 'Holding created successfully', holding });
@@ -94,17 +98,49 @@ router.post('/batch', async (req, res) => {
         (item.priceAction === 'custom' && item.customPrice !== undefined && item.customPrice !== null)
       ) {
         const targetPrice = item.priceAction === 'custom' ? Number(item.customPrice) : Number(item.extractedPrice);
+        const itemCurrency = item.currency || ((item.assetType === 'stock' || item.assetType === 'mutual_fund') ? 'INR' : 'USD');
         if (!isNaN(targetPrice) && targetPrice >= 0) {
           await PriceOverride.findOneAndUpdate(
             { userId: req.user._id, symbol: sym },
             {
               price: targetPrice,
               mappedSymbol: null,
+              currency: itemCurrency,
               isLocked: true,
               notes: 'Locked to screenshot price during extraction review',
             },
             { upsert: true, new: true }
           );
+        }
+      } else if (item.priceAction === 'live') {
+        // For "live" price action: if the AI provided a yahooSymbol/mfSchemeCode, save a
+        // ticker mapping override so future GET /api/prices calls can resolve the price
+        // without re-probing (e.g. CANBK -> CANBK.NS, or MF name -> scheme code).
+        const yahooSym = item.yahooSymbol ? item.yahooSymbol.trim().toUpperCase() : null;
+        const schemeCode = item.mfSchemeCode ? String(item.mfSchemeCode).trim() : null;
+
+        // Use the resolved mappedSymbol from extraction review if available; otherwise use AI hints
+        const targetMapping = item.mappedSymbol
+          ? item.mappedSymbol.trim().toUpperCase()
+          : (item.assetType === 'stock' && yahooSym && yahooSym !== sym)
+            ? yahooSym
+            : (item.assetType === 'mutual_fund' && schemeCode)
+              ? schemeCode
+              : null;
+
+        if (targetMapping) {
+          // Only save if no override already exists for this symbol
+          const existingOverride = await PriceOverride.findOne({ userId: req.user._id, symbol: sym });
+          if (!existingOverride) {
+            await PriceOverride.create({
+              userId: req.user._id,
+              symbol: sym,
+              price: null,
+              mappedSymbol: targetMapping,
+              isLocked: false, // Not locked — will use live prices via mapping
+              notes: `Auto-mapped by AI extraction (${item.assetType === 'mutual_fund' ? 'MFapi scheme code' : 'Yahoo Finance ticker'})`,
+            });
+          }
         }
       }
     }
@@ -125,6 +161,10 @@ router.post('/batch', async (req, res) => {
         walletOrAccount: '',
         chain: '',
         notes: item.notes ? item.notes.trim() : 'Imported via Screenshot AI Extraction',
+        currency: item.currency ? item.currency.trim().toUpperCase() : ((hType === 'stock' || hType === 'mutual_fund') ? 'INR' : null),
+        // Mutual fund fields
+        mfSchemeCode: hType === 'mutual_fund' && item.mfSchemeCode ? String(item.mfSchemeCode).trim() : null,
+        mfSchemeName: hType === 'mutual_fund' && item.mfSchemeName ? item.mfSchemeName.trim() : null,
       };
     });
 
@@ -153,6 +193,15 @@ router.patch('/:id', async (req, res) => {
     if (updates.symbol) updates.symbol = updates.symbol.trim().toUpperCase();
     if (updates.quantity !== undefined) updates.quantity = Number(updates.quantity);
     if (updates.avgBuyPrice !== undefined) updates.avgBuyPrice = Number(updates.avgBuyPrice);
+    if (updates.mfSchemeCode !== undefined) {
+      updates.mfSchemeCode = updates.mfSchemeCode ? String(updates.mfSchemeCode).trim() : null;
+    }
+    if (updates.mfSchemeName !== undefined) {
+      updates.mfSchemeName = updates.mfSchemeName ? updates.mfSchemeName.trim() : null;
+    }
+    if (updates.currency !== undefined) {
+      updates.currency = updates.currency ? updates.currency.trim().toUpperCase() : null;
+    }
 
     // Verify ownership before updating
     const holding = await Holding.findOneAndUpdate(

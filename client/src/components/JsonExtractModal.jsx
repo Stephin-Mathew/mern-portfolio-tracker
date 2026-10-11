@@ -10,10 +10,11 @@ const EXTRACTION_PROMPT = `You are an expert financial OCR assistant. Analyze th
 STRICT RULES:
 1. Return ONLY a raw JSON array. Do NOT wrap in markdown backticks, no \`\`\`json blocks, no prose.
 2. Do NOT merge, combine, or sum holdings with the same symbol/name. If the same symbol appears multiple times (across multiple images or multiple rows in the same screenshot), extract EACH occurrence as a separate entry with its own individual quantity and prices.
-3. Format each object exactly as follows:
+3. Format each object exactly as follows — for stocks:
 [
   {
     "symbol": "CANBK",
+    "yahooSymbol": "CANBK.NS",
     "quantity": 5,
     "extractedPrice": 119.51,
     "totalValue": 597.55,
@@ -21,17 +22,37 @@ STRICT RULES:
     "assetType": "stock"
   }
 ]
+For mutual funds:
+[
+  {
+    "symbol": "MOTILAL OSWAL NIFTY 200 MOMENTUM 30 INDEX FUND - DIRECT PLAN",
+    "mfSchemeCode": "149800",
+    "quantity": 17.96,
+    "extractedPrice": 32.45,
+    "totalValue": 582.80,
+    "avgBuyPrice": 28.10,
+    "assetType": "mutual_fund"
+  }
+]
 4. "assetType" must be one of: "stock", "mutual_fund", "cash". Use "stock" for exchange-traded tickers and ETFs (e.g. CANBK, INFY, NIFTYBEES). Use "mutual_fund" for mutual fund schemes (names containing "FUND", "PLAN", "DIRECT", "ELSS", "INDEX FUND", etc.).
 5. "symbol":
    - For stocks/ETFs, use the exact uppercase ticker shown on screen (e.g. CANBK, CDSL, INFY, ITC, NIFTYBEES, TMCV, TMPV). Do NOT normalize or expand it.
    - For mutual funds there is no ticker, so use the full scheme name exactly as shown, in uppercase. Names often wrap across 2-3 lines; join those lines into a single string with single spaces (e.g. "MOTILAL OSWAL NIFTY 200 MOMENTUM 30 INDEX FUND - DIRECT PLAN").
-6. "quantity" is the number after "Qty." as a clean number, with no text or commas. Keep all decimals exactly as shown (e.g. 17.960, 0.312, 504.215; whole numbers like 5 or 73 stay whole).
-7. "extractedPrice" is the LTP (last traded price / current NAV) shown on the right side of the "Invested" row. Remove commas (e.g. "5,591.15" becomes 5591.15).
-8. "totalValue" is the current market value of the holding. This screen does NOT show it directly, so calculate it as quantity * LTP, rounded to 2 decimals. Cross-check: it should be approximately equal to Invested + P&L amount. If they disagree noticeably, re-read the digits.
-9. "avgBuyPrice" is the number after "Buy avg." (remove commas). If not visible, use 0.
-10. Numbers may contain thousands separators (e.g. 1,261.90, 17,718.77). Strip commas and output plain numbers. Never output numbers as strings.
-11. Ignore everything that is not a holding row: status bar (time, battery, network), the "Holdings" title, "Last updated" line, Search/Sort controls, the P&L percentage and P&L amount (green/red numbers), and any partially cut-off row at the very top or bottom of the screen where quantity or LTP is not fully visible.
-12. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
+6. "yahooSymbol" (STOCKS ONLY — optional but highly recommended):
+   - For Indian NSE-listed stocks and ETFs, append ".NS" to the ticker (e.g. "CANBK" → "CANBK.NS", "INFY" → "INFY.NS", "NIFTYBEES" → "NIFTYBEES.NS").
+   - For BSE-only stocks, use ".BO" suffix. Most Indian stocks are on NSE so default to ".NS".
+   - For US stocks (AAPL, MSFT, TSLA, etc.), set yahooSymbol to the bare ticker (e.g. "AAPL") — no suffix needed.
+   - If you are NOT sure of the correct exchange or ticker, omit this field entirely (do not guess).
+7. "mfSchemeCode" (MUTUAL FUNDS ONLY — optional but highly recommended):
+   - This is the numeric scheme code used by MFapi.in / AMFI India to identify a mutual fund scheme.
+   - If you recognize the fund name and know its AMFI scheme code, output it as a string of 5-6 digits. If unsure, omit this field.
+8. "quantity" is the number after "Qty." as a clean number, with no text or commas. Keep all decimals exactly as shown (e.g. 17.960, 0.312, 504.215; whole numbers like 5 or 73 stay whole).
+9. "extractedPrice" is the LTP (last traded price / current NAV) shown on the right side of the "Invested" row. Remove commas (e.g. "5,591.15" becomes 5591.15).
+10. "totalValue" is the current market value of the holding. This screen does NOT show it directly, so calculate it as quantity * LTP, rounded to 2 decimals. Cross-check: it should be approximately equal to Invested + P&L amount. If they disagree noticeably, re-read the digits.
+11. "avgBuyPrice" is the number after "Buy avg." (remove commas). If not visible, use 0.
+12. Numbers may contain thousands separators (e.g. 1,261.90, 17,718.77). Strip commas and output plain numbers. Never output numbers as strings.
+13. Ignore everything that is not a holding row: status bar (time, battery, network), the "Holdings" title, "Last updated" line, Search/Sort controls, the P&L percentage and P&L amount (green/red numbers), and any partially cut-off row at the very top or bottom of the screen where quantity or LTP is not fully visible.
+14. Omit any rows that are clearly UI elements, totals-only rows, or have zero quantity.`;
 
 const VALID_ASSET_TYPES = ['crypto', 'stock', 'mutual_fund', 'cash'];
 const KNOWN_STOCKS = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ', 'AMD', 'NFLX', 'DIS', 'BA', 'V', 'JPM', 'WMT'];
@@ -99,14 +120,16 @@ const validatePastedJson = (jsonText) => {
 
     // --- extractedPrice & totalValue from screenshot/LLM ---
     let extractedPrice = null;
-    if (item.extractedPrice !== undefined && item.extractedPrice !== null && item.extractedPrice !== '') {
-      const ep = Number(item.extractedPrice);
+    const rawEp = item.extractedPrice ?? item.price ?? item.ltp ?? item.currentPrice ?? item.nav ?? item.marketPrice ?? item.unitPrice;
+    if (rawEp !== undefined && rawEp !== null && rawEp !== '') {
+      const ep = Number(rawEp);
       if (!isNaN(ep) && ep >= 0) extractedPrice = ep;
     }
 
     let totalValue = null;
-    if (item.totalValue !== undefined && item.totalValue !== null && item.totalValue !== '') {
-      const tv = Number(item.totalValue);
+    const rawTv = item.totalValue ?? item.total ?? item.currentValue ?? item.value;
+    if (rawTv !== undefined && rawTv !== null && rawTv !== '') {
+      const tv = Number(rawTv);
       if (!isNaN(tv) && tv >= 0) totalValue = tv;
     }
 
@@ -120,8 +143,14 @@ const validatePastedJson = (jsonText) => {
       totalValue = Number((extractedPrice * quantity).toFixed(2));
     }
 
+    // Pass through optional AI-provided hints for direct price API lookups
+    const yahooSymbol = item.yahooSymbol ? String(item.yahooSymbol).trim().toUpperCase() : undefined;
+    const mfSchemeCode = item.mfSchemeCode ? String(item.mfSchemeCode).trim() : undefined;
+
     normalizedItems.push({
       symbol,
+      ...(yahooSymbol ? { yahooSymbol } : {}),
+      ...(mfSchemeCode ? { mfSchemeCode } : {}),
       quantity,
       extractedPrice,
       totalValue,

@@ -14,6 +14,7 @@ const ICON_MAP = {
 
 export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
   const { wallets, loading } = useWallets();
+  const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
 
   // Calculate USD valuation per wallet
   const calculateWalletValue = (walletId) => {
@@ -21,12 +22,22 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
     holdings.forEach((h) => {
       if (h.walletId && h.walletId.toString() === walletId.toString()) {
         let currentPrice = 0;
+        const entry = prices[h.symbol];
+        const isINR =
+          h.assetType === 'mutual_fund' ||
+          h.currency === 'INR' ||
+          entry?.currency === 'INR' ||
+          (entry?.priceInr != null && entry.priceInr > 0) ||
+          (entry?.navInr != null && entry.navInr > 0) ||
+          h.symbol?.endsWith('.NS') ||
+          h.symbol?.endsWith('.BO');
+
         if (h.assetType === 'cash') {
           currentPrice = 1;
-        } else if (prices[h.symbol] !== undefined) {
-          currentPrice = typeof prices[h.symbol] === 'object' ? prices[h.symbol].price : prices[h.symbol];
+        } else if (entry !== undefined) {
+          currentPrice = typeof entry === 'object' ? Number(entry.price || 0) : Number(entry || 0);
         } else {
-          currentPrice = Number(h.avgBuyPrice) || 0;
+          currentPrice = isINR && inrRate > 0 ? (Number(h.avgBuyPrice) || 0) / inrRate : (Number(h.avgBuyPrice) || 0);
         }
         value += (Number(h.quantity) || 0) * currentPrice;
       }
@@ -38,21 +49,31 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
   let totalPortfolioValue = 0;
   holdings.forEach((h) => {
     let currentPrice = 0;
+    const entry = prices[h.symbol];
+    const isINR =
+      h.assetType === 'mutual_fund' ||
+      h.currency === 'INR' ||
+      entry?.currency === 'INR' ||
+      (entry?.priceInr != null && entry.priceInr > 0) ||
+      (entry?.navInr != null && entry.navInr > 0) ||
+      h.symbol?.endsWith('.NS') ||
+      h.symbol?.endsWith('.BO');
+
     if (h.assetType === 'cash') {
       currentPrice = 1;
-    } else if (prices[h.symbol] !== undefined) {
-      currentPrice = typeof prices[h.symbol] === 'object' ? prices[h.symbol].price : prices[h.symbol];
+    } else if (entry !== undefined) {
+      currentPrice = typeof entry === 'object' ? Number(entry.price || 0) : Number(entry || 0);
     } else {
-      currentPrice = Number(h.avgBuyPrice) || 0;
+      currentPrice = isINR && inrRate > 0 ? (Number(h.avgBuyPrice) || 0) / inrRate : (Number(h.avgBuyPrice) || 0);
     }
     totalPortfolioValue += (Number(h.quantity) || 0) * currentPrice;
   });
 
   const formatUSD = (num) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num);
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num || 0);
 
   const formatINR = (num) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(num);
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format((num || 0) * inrRate);
 
   const formatValue = (num, walletType) =>
     walletType === 'stock' ? formatINR(num) : formatUSD(num);

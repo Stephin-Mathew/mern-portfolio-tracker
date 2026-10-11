@@ -34,6 +34,14 @@ const priceOverrideSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    currency: {
+      type: String,
+      default: 'USD',
+    },
+    priceInr: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,

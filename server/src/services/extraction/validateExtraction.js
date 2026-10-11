@@ -63,14 +63,16 @@ export const validateExtractionResult = (data) => {
 
     // --- extractedPrice & totalValue from screenshot ---
     let extractedPrice = null;
-    if (item.extractedPrice !== undefined && item.extractedPrice !== null && item.extractedPrice !== '') {
-      const ep = Number(item.extractedPrice);
+    const rawEp = item.extractedPrice ?? item.price ?? item.ltp ?? item.currentPrice ?? item.nav ?? item.marketPrice ?? item.unitPrice;
+    if (rawEp !== undefined && rawEp !== null && rawEp !== '') {
+      const ep = Number(rawEp);
       if (!isNaN(ep) && ep >= 0) extractedPrice = ep;
     }
 
     let totalValue = null;
-    if (item.totalValue !== undefined && item.totalValue !== null && item.totalValue !== '') {
-      const tv = Number(item.totalValue);
+    const rawTv = item.totalValue ?? item.total ?? item.currentValue ?? item.value;
+    if (rawTv !== undefined && rawTv !== null && rawTv !== '') {
+      const tv = Number(rawTv);
       if (!isNaN(tv) && tv >= 0) totalValue = tv;
     }
 
@@ -84,8 +86,16 @@ export const validateExtractionResult = (data) => {
       totalValue = Number((extractedPrice * quantity).toFixed(2));
     }
 
+    // Pass through optional AI-provided hints for direct price API lookups
+    // yahooSymbol: e.g. "CANBK.NS" — used by Yahoo Finance for Indian stocks
+    // mfSchemeCode: e.g. "120503" — used by MFapi.in for Indian mutual funds
+    const yahooSymbol = item.yahooSymbol ? String(item.yahooSymbol).trim().toUpperCase() : undefined;
+    const mfSchemeCode = item.mfSchemeCode ? String(item.mfSchemeCode).trim() : undefined;
+
     normalizedItems.push({
       symbol,
+      ...(yahooSymbol ? { yahooSymbol } : {}),
+      ...(mfSchemeCode ? { mfSchemeCode } : {}),
       quantity,
       extractedPrice,
       totalValue,

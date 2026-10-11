@@ -83,21 +83,26 @@ export const HoldingsTable = ({
     }
   };
 
-  // Helper to extract clean price and percentage changes
+  // Helper to extract clean price, currency, and percentage changes
   const getPriceInfo = (symbol, assetType) => {
     if (assetType === 'cash') {
-      return { price: 1, change24h: 0, change7d: 0, change30d: 0 };
+      return { price: 1, change24h: 0, change7d: 0, change30d: 0, currency: 'USD' };
     }
     const entry = prices[symbol];
-    if (!entry) return { price: 0, change24h: 0, change7d: 0, change30d: 0 };
+    if (!entry) return { price: 0, change24h: 0, change7d: 0, change30d: 0, currency: null, priceInr: null, navInr: null };
     if (typeof entry === 'number') {
-      return { price: entry, change24h: 0, change7d: 0, change30d: 0 };
+      return { price: entry, change24h: 0, change7d: 0, change30d: 0, currency: null, priceInr: null, navInr: null };
     }
     return {
       price: Number(entry.price || 0),
+      priceInr: entry.priceInr !== undefined && entry.priceInr !== null ? Number(entry.priceInr) : null,
+      navInr: entry.navInr !== undefined && entry.navInr !== null ? Number(entry.navInr) : null,
+      currency: entry.currency || (entry.priceInr != null || entry.navInr != null ? 'INR' : null),
       change24h: Number(entry.change24h || 0),
       change7d: Number(entry.change7d || 0),
       change30d: Number(entry.change30d || 0),
+      mappedSymbol: entry.mappedSymbol || null,
+      isCustom: !!entry.isCustom,
     };
   };
 
@@ -117,9 +122,23 @@ export const HoldingsTable = ({
       map[sym].items.push(h);
     });
 
+    const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
+
     const groups = Object.values(map).map((group) => {
       const priceInfo = getPriceInfo(group.symbol, group.assetType);
-      const livePrice = priceInfo.price > 0 ? priceInfo.price : (group.items[0]?.avgBuyPrice || 0);
+      const isINR =
+        group.assetType === 'mutual_fund' ||
+        group.items.some((h) => h.currency === 'INR') ||
+        priceInfo.currency === 'INR' ||
+        (priceInfo.priceInr !== null && priceInfo.priceInr > 0) ||
+        (priceInfo.navInr !== null && priceInfo.navInr > 0) ||
+        group.symbol.endsWith('.NS') ||
+        group.symbol.endsWith('.BO');
+
+      const nativeLivePrice = isINR
+        ? (priceInfo.priceInr ?? priceInfo.navInr ?? (priceInfo.price > 0 ? priceInfo.price * inrRate : 0))
+        : priceInfo.price;
+      const livePrice = nativeLivePrice > 0 ? nativeLivePrice : (group.items[0]?.avgBuyPrice || 0);
 
       let totalQuantity = 0;
       let totalStockCost = 0;
@@ -162,6 +181,7 @@ export const HoldingsTable = ({
 
       return {
         ...group,
+        isINR,
         totalQuantity,
         weightedAvgBuyPrice,
         livePrice,
@@ -269,9 +289,13 @@ export const HoldingsTable = ({
     }).format(n);
   };
 
-  // Pick INR for stock/mutual fund holdings, USD for everything else
-  const fmtCurrency = (num, assetType) =>
-    (assetType === 'stock' || assetType === 'mutual_fund') ? formatINR(num) : formatUSD(num);
+  // Pick INR for mutual fund or INR stocks, USD for everything else
+  const fmtCurrency = (num, assetTypeOrIsINR) => {
+    if (typeof assetTypeOrIsINR === 'boolean') {
+      return assetTypeOrIsINR ? formatINR(num) : formatUSD(num);
+    }
+    return (assetTypeOrIsINR === 'INR' || assetTypeOrIsINR === 'mutual_fund') ? formatINR(num) : formatUSD(num);
+  };
 
   const formatQty = (num) => {
     const n = Number(num) || 0;
@@ -442,18 +466,32 @@ export const HoldingsTable = ({
               if (!hasMultiple) {
                 const h = group.items[0];
                 const priceInfo = getPriceInfo(h.symbol, h.assetType);
+                const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
+                const isINR =
+                  h.assetType === 'mutual_fund' ||
+                  h.currency === 'INR' ||
+                  priceInfo.currency === 'INR' ||
+                  (priceInfo.priceInr !== null && priceInfo.priceInr > 0) ||
+                  (priceInfo.navInr !== null && priceInfo.navInr > 0) ||
+                  h.symbol?.endsWith('.NS') ||
+                  h.symbol?.endsWith('.BO');
+
+                const nativePrice = isINR
+                  ? (priceInfo.priceInr ?? priceInfo.navInr ?? (priceInfo.price > 0 ? priceInfo.price * inrRate : 0))
+                  : priceInfo.price;
+
                 const currentPrice =
                   h.assetType === 'cash'
                     ? 1
-                    : priceInfo.price > 0
-                    ? priceInfo.price
+                    : nativePrice > 0
+                    ? nativePrice
                     : (h.avgBuyPrice || 0);
 
                 const val = h.quantity * currentPrice;
                 let singlePnL = 0;
                 let singlePnLPct = 0;
 
-                if (h.assetType === 'stock') {
+                if (h.assetType === 'stock' || h.assetType === 'mutual_fund') {
                   const cost = h.quantity * (h.avgBuyPrice || 0);
                   singlePnL = val - cost;
                   singlePnLPct = cost > 0 ? (singlePnL / cost) * 100 : 0;
@@ -472,10 +510,11 @@ export const HoldingsTable = ({
 
                 const singleIsProfit = singlePnL >= 0;
                 const rowStatus = rowStatuses[h._id];
+                const schemeDisplayName = h.mfSchemeName || priceInfo.schemeName;
 
                 return (
                   <tr key={h._id} className="dark:hover:bg-slate-800/40 hover:bg-slate-50 transition group">
-                    {/* Symbol */}
+                    {/* Symbol / Name */}
                     <td className="py-4 px-4 font-medium dark:text-white text-slate-900">
                       <div className="flex items-center space-x-2">
                         {editingCell?.id === h._id && editingCell?.field === 'symbol' ? (
@@ -488,6 +527,20 @@ export const HoldingsTable = ({
                             autoFocus
                             className="w-20 px-2 py-1 rounded dark:bg-slate-900 bg-white border border-cyan-500 text-cyan-600 dark:text-cyan-300 font-bold uppercase text-xs shadow-xs"
                           />
+                        ) : h.assetType === 'mutual_fund' && schemeDisplayName ? (
+                          <div
+                            onClick={() => handleCellClick(h, 'symbol', h.symbol)}
+                            className="cursor-pointer group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition"
+                            title="Click to edit symbol / scheme code"
+                          >
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-extrabold font-heading text-sm dark:text-white text-slate-900 leading-snug">
+                                {schemeDisplayName}
+                              </span>
+                              {getAssetBadge(h.assetType)}
+                            </div>
+                            <span className="text-[11px] font-mono text-slate-400">Code: {h.symbol}</span>
+                          </div>
                         ) : (
                           <div
                             onClick={() => handleCellClick(h, 'symbol', h.symbol)}
@@ -525,10 +578,10 @@ export const HoldingsTable = ({
                       )}
                     </td>
 
-                    {/* Avg Buy Price (Stocks Only) */}
+                    {/* Avg Buy Price (Stocks & Mutual Funds) */}
                     {showBuyPrice && (
                       <td className="py-4 px-4 text-right font-mono dark:text-slate-300 text-slate-700">
-                        {h.assetType === 'stock' ? (
+                        {(h.assetType === 'stock' || h.assetType === 'mutual_fund') ? (
                           editingCell?.id === h._id && editingCell?.field === 'avgBuyPrice' ? (
                             <input
                               type="number"
@@ -544,9 +597,9 @@ export const HoldingsTable = ({
                             <span
                               onClick={() => handleCellClick(h, 'avgBuyPrice', h.avgBuyPrice)}
                               className="cursor-pointer hover:text-cyan-600 dark:hover:text-cyan-300 transition px-2 py-1 rounded dark:hover:bg-slate-800/60 hover:bg-slate-200/70"
-                              title="Click to edit stock buy price"
+                              title={`Click to edit ${h.assetType === 'mutual_fund' ? 'purchase NAV' : 'stock buy price'}`}
                             >
-                              {fmtCurrency(h.avgBuyPrice, h.assetType)}
+                              {fmtCurrency(h.avgBuyPrice, isINR)}
                             </span>
                           )
                         ) : (
@@ -587,7 +640,7 @@ export const HoldingsTable = ({
                             </span>
                           ) : null}
 
-                          <span>{fmtCurrency(currentPrice, h.assetType)}</span>
+                          <span>{fmtCurrency(currentPrice, isINR)}</span>
                           {onUpdatePrice && (
                             <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover/price:opacity-100 transition" />
                           )}
@@ -597,7 +650,7 @@ export const HoldingsTable = ({
 
                     {/* Total Value */}
                     <td className="py-4 px-4 text-right font-mono font-bold dark:text-white text-slate-900">
-                      {fmtCurrency(val, h.assetType)}
+                      {fmtCurrency(val, isINR)}
                     </td>
 
                     {/* PnL & Performance */}
@@ -612,7 +665,7 @@ export const HoldingsTable = ({
                             }`}
                           >
                             {singleIsProfit ? '+' : ''}
-                            {fmtCurrency(singlePnL, h.assetType)}
+                            {fmtCurrency(singlePnL, isINR)}
                           </span>
                           <span
                             className={`text-[10px] font-bold ${
@@ -702,11 +755,11 @@ export const HoldingsTable = ({
                       {formatQty(group.totalQuantity)}
                     </td>
 
-                    {/* Weighted Avg Buy Price (Stocks Only) */}
+                    {/* Weighted Avg Buy Price (Stocks & Mutual Funds) */}
                     {showBuyPrice && (
                       <td className="py-4 px-4 text-right font-mono dark:text-slate-300 text-slate-700">
-                        {group.assetType === 'stock' && group.weightedAvgBuyPrice !== null ? (
-                          fmtCurrency(group.weightedAvgBuyPrice, group.assetType)
+                        {(group.assetType === 'stock' || group.assetType === 'mutual_fund') && group.weightedAvgBuyPrice !== null ? (
+                          fmtCurrency(group.weightedAvgBuyPrice, group.isINR)
                         ) : (
                           <span className="text-xs dark:text-slate-500 text-slate-400 italic">
                             {group.assetType === 'crypto' ? 'Airdrop / Live' : '—'}
@@ -748,7 +801,7 @@ export const HoldingsTable = ({
                             </span>
                           ) : null}
 
-                          <span>{fmtCurrency(group.livePrice, group.assetType)}</span>
+                          <span>{fmtCurrency(group.livePrice, group.isINR)}</span>
                           {onUpdatePrice && (
                             <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover/price:opacity-100 transition" />
                           )}
@@ -758,7 +811,7 @@ export const HoldingsTable = ({
 
                     {/* Total Aggregated Value */}
                     <td className="py-4 px-4 text-right font-mono font-extrabold text-cyan-600 dark:text-cyan-300 text-base">
-                      {fmtCurrency(group.totalValue, group.assetType)}
+                      {fmtCurrency(group.totalValue, group.isINR)}
                     </td>
 
                     {/* Total Aggregated PnL */}
@@ -773,7 +826,7 @@ export const HoldingsTable = ({
                             }`}
                           >
                             {isProfit ? '+' : ''}
-                            {fmtCurrency(group.pnl, group.assetType)}
+                            {fmtCurrency(group.pnl, group.isINR)}
                           </span>
                           <span
                             className={`text-[10px] font-bold ${
@@ -812,7 +865,7 @@ export const HoldingsTable = ({
                               <tr>
                                 <th className="p-2.5">Split Entry</th>
                                 <th className="p-2.5 text-right">Quantity (% Share)</th>
-                                {showBuyPrice && group.assetType === 'stock' && (
+                                {showBuyPrice && (group.assetType === 'stock' || group.assetType === 'mutual_fund') && (
                                   <th className="p-2.5 text-right">Buy Price</th>
                                 )}
                                 <th className="p-2.5 text-right">Value</th>
@@ -825,15 +878,15 @@ export const HoldingsTable = ({
                                 const subCurrentPrice =
                                   subItem.assetType === 'cash'
                                     ? 1
-                                    : group.priceInfo.price > 0
-                                    ? group.priceInfo.price
+                                    : group.livePrice > 0
+                                    ? group.livePrice
                                     : (subItem.avgBuyPrice || 0);
 
                                 const subVal = subItem.quantity * subCurrentPrice;
                                 let subPnL = 0;
                                 let subPnLPct = 0;
 
-                                if (subItem.assetType === 'stock') {
+                                if (subItem.assetType === 'stock' || subItem.assetType === 'mutual_fund') {
                                   const subCost = subItem.quantity * (subItem.avgBuyPrice || 0);
                                   subPnL = subVal - subCost;
                                   subPnLPct = subCost > 0 ? (subPnL / subCost) * 100 : 0;
@@ -897,7 +950,7 @@ export const HoldingsTable = ({
                                     </td>
 
                                     {/* Buy Price or Status */}
-                                    {showBuyPrice && group.assetType === 'stock' && (
+                                    {showBuyPrice && (group.assetType === 'stock' || group.assetType === 'mutual_fund') && (
                                       <td className="p-2.5 text-right font-mono dark:text-slate-300 text-slate-700">
                                         {editingCell?.id === subItem._id && editingCell?.field === 'avgBuyPrice' ? (
                                           <input
@@ -914,9 +967,9 @@ export const HoldingsTable = ({
                                           <span
                                             onClick={() => handleCellClick(subItem, 'avgBuyPrice', subItem.avgBuyPrice)}
                                             className="cursor-pointer hover:text-cyan-600 dark:hover:text-cyan-300 transition px-2 py-1 rounded dark:hover:bg-slate-800/60 hover:bg-slate-200/70"
-                                            title="Click to edit stock buy price"
+                                            title="Click to edit buy price"
                                           >
-                                            {formatUSD(subItem.avgBuyPrice)}
+                                            {fmtCurrency(subItem.avgBuyPrice, group.isINR)}
                                           </span>
                                         )}
                                       </td>
@@ -924,7 +977,7 @@ export const HoldingsTable = ({
 
                                     {/* Value */}
                                     <td className="p-2.5 text-right font-mono font-bold dark:text-white text-slate-900">
-                                      {fmtCurrency(subVal, subItem.assetType)}
+                                      {fmtCurrency(subVal, group.isINR)}
                                     </td>
 
                                     {/* PnL */}
@@ -935,7 +988,7 @@ export const HoldingsTable = ({
                                         }`}
                                       >
                                         {subIsProfit ? '+' : ''}
-                                        {fmtCurrency(subPnL, subItem.assetType)} ({subIsProfit ? '+' : ''}
+                                        {fmtCurrency(subPnL, group.isINR)} ({subIsProfit ? '+' : ''}
                                         {subPnLPct.toFixed(1)}%)
                                       </span>
                                     </td>
@@ -989,7 +1042,13 @@ export const HoldingsTable = ({
           setPriceModalSymbol(null);
         }}
         symbol={priceModalSymbol}
-        currentPriceInfo={priceModalSymbol ? prices[priceModalSymbol] || {} : {}}
+        currentPriceInfo={
+          priceModalSymbol
+            ? (typeof prices[priceModalSymbol] === 'object' && prices[priceModalSymbol] !== null
+                ? prices[priceModalSymbol]
+                : { price: Number(prices[priceModalSymbol]) || 0 })
+            : {}
+        }
         onSavePrice={onUpdatePrice}
         onResetPrice={onResetPrice}
       />

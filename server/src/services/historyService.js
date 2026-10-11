@@ -23,19 +23,32 @@ export const captureUserSnapshot = async (userId) => {
     let mutualFundVal = 0;
     let cashVal = 0;
 
+    const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
+
     holdings.forEach((h) => {
       let price = 0;
+      const entry = prices[h.symbol];
+      const isINR =
+        h.assetType === 'mutual_fund' ||
+        h.currency === 'INR' ||
+        entry?.currency === 'INR' ||
+        (entry?.priceInr != null && entry.priceInr > 0) ||
+        (entry?.navInr != null && entry.navInr > 0) ||
+        h.symbol?.endsWith('.NS') ||
+        h.symbol?.endsWith('.BO');
+
       if (h.assetType === 'cash') {
         price = 1;
-      } else if (prices[h.symbol] !== undefined) {
-        price = typeof prices[h.symbol] === 'object' ? prices[h.symbol].price : prices[h.symbol];
+      } else if (entry !== undefined) {
+        price = typeof entry === 'object' ? Number(entry.price || 0) : Number(entry || 0);
       } else {
-        price = h.avgBuyPrice || 0;
+        price = isINR && inrRate > 0 ? (Number(h.avgBuyPrice) || 0) / inrRate : (Number(h.avgBuyPrice) || 0);
       }
 
       const val = h.quantity * price;
-      // Cost basis is strictly tracked for stocks and mutual funds
-      const cost = (h.assetType === 'stock' || h.assetType === 'mutual_fund') ? h.quantity * (h.avgBuyPrice || 0) : 0;
+      // Cost basis is strictly tracked for stocks and mutual funds (normalized to USD)
+      const rawCost = (h.assetType === 'stock' || h.assetType === 'mutual_fund') ? h.quantity * (Number(h.avgBuyPrice) || 0) : 0;
+      const cost = isINR && inrRate > 0 ? rawCost / inrRate : rawCost;
 
       totalValue += val;
       totalCost += cost;
@@ -121,17 +134,30 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
   let mutualFundVal = 0;
   let cashVal = 0;
 
+  const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
+
   holdings.forEach((h) => {
     let p = 0;
+    const entry = prices[h.symbol];
+    const isINR =
+      h.assetType === 'mutual_fund' ||
+      h.currency === 'INR' ||
+      entry?.currency === 'INR' ||
+      (entry?.priceInr != null && entry.priceInr > 0) ||
+      (entry?.navInr != null && entry.navInr > 0) ||
+      h.symbol?.endsWith('.NS') ||
+      h.symbol?.endsWith('.BO');
+
     if (h.assetType === 'cash') p = 1;
-    else if (prices[h.symbol] !== undefined) {
-      p = typeof prices[h.symbol] === 'object' ? prices[h.symbol].price : prices[h.symbol];
+    else if (entry !== undefined) {
+      p = typeof entry === 'object' ? Number(entry.price || 0) : Number(entry || 0);
     } else {
-      p = h.avgBuyPrice || 0;
+      p = isINR && inrRate > 0 ? (Number(h.avgBuyPrice) || 0) / inrRate : (Number(h.avgBuyPrice) || 0);
     }
 
     const v = h.quantity * p;
-    const c = (h.assetType === 'stock' || h.assetType === 'mutual_fund') ? h.quantity * (h.avgBuyPrice || 0) : 0;
+    const rawCost = (h.assetType === 'stock' || h.assetType === 'mutual_fund') ? h.quantity * (Number(h.avgBuyPrice) || 0) : 0;
+    const c = isINR && inrRate > 0 ? rawCost / inrRate : rawCost;
     currentVal += v;
     currentCost += c;
 

@@ -49,11 +49,20 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
     let p = 0;
     let ch24 = 0;
     let ch7 = 0;
+    const entry = prices[h.symbol];
+
+    const isINR =
+      h.assetType === 'mutual_fund' ||
+      h.currency === 'INR' ||
+      entry?.currency === 'INR' ||
+      (entry?.priceInr != null && entry.priceInr > 0) ||
+      (entry?.navInr != null && entry.navInr > 0) ||
+      h.symbol?.endsWith('.NS') ||
+      h.symbol?.endsWith('.BO');
 
     if (h.assetType === 'cash') {
       p = 1;
-    } else if (prices[h.symbol]) {
-      const entry = prices[h.symbol];
+    } else if (entry) {
       if (typeof entry === 'object') {
         p = Number(entry.price || 0);
         ch24 = Number(entry.change24h || 0);
@@ -62,7 +71,7 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
         p = Number(entry) || 0;
       }
     } else {
-      p = Number(h.avgBuyPrice) || 0;
+      p = isINR && inrRate > 0 ? (Number(h.avgBuyPrice) || 0) / inrRate : (Number(h.avgBuyPrice) || 0);
     }
 
     const qty = Number(h.quantity) || 0;
@@ -82,7 +91,8 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
       } else {
         mutualFundValue += val;
       }
-      const cost = qty * (Number(h.avgBuyPrice) || 0);
+      const rawCost = qty * (Number(h.avgBuyPrice) || 0);
+      const cost = isINR && inrRate > 0 ? rawCost / inrRate : rawCost;
       totalStockCost += cost;
       stockTotalPnL += (val - cost);
 

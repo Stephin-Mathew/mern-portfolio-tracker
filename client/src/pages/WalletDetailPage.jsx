@@ -32,6 +32,7 @@ export const WalletDetailPage = ({
   const { wallets, deleteWallet, loading: walletsLoading } = useWallets();
 
   const wallet = wallets.find((w) => w._id === id);
+  const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
 
   // Filter holdings for this specific wallet
   const walletHoldings = holdings.filter(
@@ -50,11 +51,20 @@ export const WalletDetailPage = ({
   walletHoldings.forEach((h) => {
     let currentPrice = 0;
     let ch24 = 0;
+    const entry = prices[h.symbol];
+
+    const isINR =
+      h.assetType === 'mutual_fund' ||
+      h.currency === 'INR' ||
+      entry?.currency === 'INR' ||
+      (entry?.priceInr != null && entry.priceInr > 0) ||
+      (entry?.navInr != null && entry.navInr > 0) ||
+      h.symbol?.endsWith('.NS') ||
+      h.symbol?.endsWith('.BO');
 
     if (h.assetType === 'cash') {
       currentPrice = 1;
-    } else if (prices[h.symbol] !== undefined) {
-      const entry = prices[h.symbol];
+    } else if (entry !== undefined) {
       if (typeof entry === 'object') {
         currentPrice = Number(entry.price || 0);
         ch24 = Number(entry.change24h || 0);
@@ -62,7 +72,7 @@ export const WalletDetailPage = ({
         currentPrice = Number(entry) || 0;
       }
     } else {
-      currentPrice = Number(h.avgBuyPrice) || 0;
+      currentPrice = isINR && inrRate > 0 ? (Number(h.avgBuyPrice) || 0) / inrRate : (Number(h.avgBuyPrice) || 0);
     }
 
     const qty = Number(h.quantity) || 0;
@@ -76,7 +86,8 @@ export const WalletDetailPage = ({
     } else if (h.assetType === 'stock' || h.assetType === 'mutual_fund') {
       if (h.assetType === 'stock') stockVal += val;
       else mutualFundVal += val;
-      const cost = qty * (Number(h.avgBuyPrice) || 0);
+      const rawCost = qty * (Number(h.avgBuyPrice) || 0);
+      const cost = isINR && inrRate > 0 ? rawCost / inrRate : rawCost;
       totalStockCost += cost;
       const start24 = currentPrice / (1 + ch24 / 100);
       wallet24hPnL += qty * (currentPrice - start24);
@@ -100,10 +111,10 @@ export const WalletDetailPage = ({
   };
 
   const formatUSD = (num) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num);
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num || 0);
 
   const formatINR = (num) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(num);
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format((num || 0) * inrRate);
 
   const fmt = (num) => wallet?.type === 'stock' ? formatINR(num) : formatUSD(num);
 

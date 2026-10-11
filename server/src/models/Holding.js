@@ -54,6 +54,23 @@ const holdingSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // MFapi.in scheme code — numeric string used to look up NAV for Indian mutual funds
+    mfSchemeCode: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    // Human-readable mutual fund scheme name (stored for display without extra API calls)
+    mfSchemeName: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    currency: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import { clerkMiddleware } from '@clerk/express';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/auth.js';
@@ -47,6 +48,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
     app: 'AI Crypto & Stock Portfolio Tracker API',
+    dbHost: mongoose.connection?.host || 'disconnected',
     timestamp: new Date(),
   });
 });

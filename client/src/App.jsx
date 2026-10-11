@@ -611,12 +611,65 @@ function AppContent() {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('UI Crash intercepted by ErrorBoundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-white">
+          <div className="max-w-md w-full glass-panel p-6 rounded-2xl border border-rose-500/30 text-center space-y-4">
+            <h2 className="text-xl font-bold text-rose-400 font-heading">Something went wrong</h2>
+            <p className="text-xs text-slate-400 font-mono leading-relaxed">
+              {this.state.error?.message || 'An unexpected rendering error occurred.'}
+            </p>
+            <div className="flex items-center justify-center space-x-3 pt-2">
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.reload();
+                }}
+                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+              >
+                Reload Page
+              </button>
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition cursor-pointer"
+              >
+                Dismiss & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App() {
   return (
     <BrowserRouter>
       <WalletProvider>
-        <AppContent />
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
       </WalletProvider>
     </BrowserRouter>
   );
 }
+

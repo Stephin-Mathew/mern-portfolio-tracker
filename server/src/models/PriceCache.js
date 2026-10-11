@@ -34,6 +34,33 @@ const priceCacheSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    // MFapi.in scheme code for mutual fund NAV lookups
+    mfSchemeCode: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    // Latest NAV in INR (mutual funds only)
+    navInr: {
+      type: Number,
+      default: null,
+    },
+    // Scheme name from MFapi.in (mutual funds only)
+    schemeName: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    // Currency of native price ('USD', 'INR', etc.)
+    currency: {
+      type: String,
+      default: 'USD',
+    },
+    // Native INR price for NSE/BSE stocks
+    priceInr: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,
