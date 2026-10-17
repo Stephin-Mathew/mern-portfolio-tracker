@@ -15,7 +15,7 @@ const walletSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['crypto', 'stock', 'exchange', 'bank', 'other'],
+      enum: ['crypto', 'stock', 'exchange', 'bank', 'cash', 'other'],
       default: 'crypto',
       required: true,
     },

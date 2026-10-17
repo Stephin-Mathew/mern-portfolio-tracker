@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { assetType, symbol, quantity, avgBuyPrice, walletId, notes, mfSchemeCode, mfSchemeName, currency } = req.body;
+    const { assetType, symbol, quantity, avgBuyPrice, walletId, notes, mfSchemeCode, mfSchemeName, currency, walletOrAccount } = req.body;
 
     if (!symbol || quantity === undefined || quantity < 0) {
       return res.status(400).json({ message: 'Valid symbol and non-negative quantity are required' });
@@ -48,7 +48,7 @@ router.post('/', async (req, res) => {
       quantity: Number(quantity),
       avgBuyPrice: parsedBuyPrice,
       walletId: walletId || null,
-      walletOrAccount: '',
+      walletOrAccount: walletOrAccount ? String(walletOrAccount).trim() : '',
       chain: '',
       notes: notes ? notes.trim() : '',
       currency: currency ? currency.trim().toUpperCase() : ((holdingType === 'stock' || holdingType === 'mutual_fund') ? 'INR' : null),
@@ -201,6 +201,9 @@ router.patch('/:id', async (req, res) => {
     }
     if (updates.currency !== undefined) {
       updates.currency = updates.currency ? updates.currency.trim().toUpperCase() : null;
+    }
+    if (updates.walletOrAccount !== undefined) {
+      updates.walletOrAccount = updates.walletOrAccount ? String(updates.walletOrAccount).trim() : '';
     }
 
     // Verify ownership before updating

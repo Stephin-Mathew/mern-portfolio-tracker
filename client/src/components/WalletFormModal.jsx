@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Wallet, Coins, Shield, CreditCard, Landmark, Vault, Palette } from 'lucide-react';
+import { X, Wallet, Coins, Shield, CreditCard, Landmark, Vault, Palette, IndianRupee } from 'lucide-react';
+
 
 const WALLET_TYPES = [
   { id: 'crypto', label: 'Crypto Wallet / Web3', icon: Coins },
   { id: 'stock', label: 'Stock Brokerage', icon: Landmark },
   { id: 'exchange', label: 'Exchange Account', icon: Wallet },
   { id: 'bank', label: 'Bank Account', icon: CreditCard },
+  { id: 'cash', label: 'Cash / INR', icon: IndianRupee },
   { id: 'other', label: 'Custom / Other', icon: Vault },
 ];
 
@@ -27,6 +29,7 @@ const ICON_OPTIONS = [
   { id: 'credit-card', label: 'Card', Icon: CreditCard },
   { id: 'landmark', label: 'Bank', Icon: Landmark },
   { id: 'vault', label: 'Vault', Icon: Vault },
+  { id: 'rupee', label: 'Rupee', Icon: IndianRupee },
 ];
 
 export const WalletFormModal = ({ isOpen, onClose, onSave, walletToEdit }) => {
@@ -150,7 +153,14 @@ export const WalletFormModal = ({ isOpen, onClose, onSave, walletToEdit }) => {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setType(item.id)}
+                    onClick={() => {
+                      setType(item.id);
+                      // Smart defaults for cash wallets
+                      if (item.id === 'cash') {
+                        setIcon('rupee');
+                        setColor('#10b981');
+                      }
+                    }}
                     className={`flex items-center space-x-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                       isSelected
                         ? 'dark:bg-cyan-500/15 bg-cyan-50 border-cyan-500 text-cyan-600 dark:text-cyan-300 shadow-sm'
@@ -164,6 +174,13 @@ export const WalletFormModal = ({ isOpen, onClose, onSave, walletToEdit }) => {
               })}
             </div>
           </div>
+
+          {/* Cash wallet hint */}
+          {type === 'cash' && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs leading-relaxed">
+              💰 <strong>Cash / INR Wallet:</strong> A dedicated space to track your INR cash across different locations — purse, Google Pay, PhonePe, Paytm, savings account, FD, and more. All values are stored in Indian Rupees.
+            </div>
+          )}
 
           {/* Color Accent Picker */}
           <div>

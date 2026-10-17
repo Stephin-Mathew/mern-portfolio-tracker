@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useWallets } from '../context/WalletContext';
-import { Wallet, Plus, ChevronRight, Coins, Landmark, CreditCard, Vault, Shield } from 'lucide-react';
+import { Wallet, Plus, ChevronRight, Coins, Landmark, CreditCard, Vault, Shield, IndianRupee } from 'lucide-react';
 
 const ICON_MAP = {
   wallet: Wallet,
@@ -10,6 +10,7 @@ const ICON_MAP = {
   'credit-card': CreditCard,
   landmark: Landmark,
   vault: Vault,
+  rupee: IndianRupee,
 };
 
 export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
@@ -75,8 +76,13 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
   const formatINR = (num) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format((num || 0) * inrRate);
 
-  const formatValue = (num, walletType) =>
-    walletType === 'stock' ? formatINR(num) : formatUSD(num);
+  const formatINRDirect = (num) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num || 0);
+
+  const formatValue = (num, walletType) => {
+    if (walletType === 'cash') return formatINRDirect(num);
+    return walletType === 'stock' ? formatINR(num) : formatUSD(num);
+  };
 
   // Sort wallets descending by total dollar balance (highest $ count account first)
   const sortedWalletsWithValues = useMemo(() => {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useWallets } from '../context/WalletContext';
 import { HoldingsTable } from '../components/HoldingsTable';
-import { ArrowLeft, Wallet, Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Coins, Landmark, CreditCard, Vault, Shield } from 'lucide-react';
+import { ArrowLeft, Wallet, Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Coins, Landmark, CreditCard, Vault, Shield, IndianRupee } from 'lucide-react';
 
 const ICON_MAP = {
   wallet: Wallet,
@@ -11,6 +11,7 @@ const ICON_MAP = {
   'credit-card': CreditCard,
   landmark: Landmark,
   vault: Vault,
+  rupee: IndianRupee,
 };
 
 export const WalletDetailPage = ({

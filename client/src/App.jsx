@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { WalletsPage } from './pages/WalletsPage';
 import { WalletDetailPage } from './pages/WalletDetailPage';
+import { CashWalletPage } from './pages/CashWalletPage';
 import { HoldingFormModal } from './components/HoldingFormModal';
 import { WalletFormModal } from './components/WalletFormModal';
 import { ScreenshotUploadModal } from './components/ScreenshotUploadModal';
@@ -506,31 +507,61 @@ function AppContent() {
             <Route
               path="/wallets/:id"
               element={
-                <WalletDetailPage
-                  holdings={holdings}
-                  prices={prices}
-                  onUpdateHolding={handleOptimisticUpdate}
-                  onDeleteHolding={promptDeleteHolding}
-                  onEditClick={(holding) => {
-                    setHoldingToEdit(holding);
-                    setTargetWalletId(holding.walletId || '');
-                    setIsFormModalOpen(true);
-                  }}
-                  onOpenAddModalWithWallet={(wId) => {
-                    setHoldingToEdit(null);
-                    setTargetWalletId(wId);
-                    setIsFormModalOpen(true);
-                  }}
-                  onOpenEditWallet={(w) => {
-                    setWalletToEdit(w);
-                    setIsWalletModalOpen(true);
-                  }}
-                  onDeleteWallet={promptDeleteWallet}
-                  onClearWalletHoldings={promptClearWalletHoldings}
-                  onUpdatePrice={handleUpdatePrice}
-                  onResetPrice={handleResetPrice}
-                  rowStatuses={rowStatuses}
-                />
+                (() => {
+                  // Detect the wallet type from the URL to pick the right detail page
+                  const detailWallet = wallets.find((w) => w._id === activeWalletId);
+                  if (detailWallet?.type === 'cash') {
+                    return (
+                      <CashWalletPage
+                        holdings={holdings}
+                        onDeleteHolding={promptDeleteHolding}
+                        onOpenEditWallet={(w) => {
+                          setWalletToEdit(w);
+                          setIsWalletModalOpen(true);
+                        }}
+                        onDeleteWallet={promptDeleteWallet}
+                        onClearWalletHoldings={promptClearWalletHoldings}
+                        showToast={showToast}
+                        onHoldingAdded={(h) => {
+                          setHoldings((prev) => [h, ...prev]);
+                          fetchPortfolioData().catch(() => {});
+                          fetchWallets().catch(() => {});
+                        }}
+                        onHoldingUpdated={(h) => {
+                          setHoldings((prev) => prev.map((x) => x._id === h._id ? h : x));
+                          fetchWallets().catch(() => {});
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <WalletDetailPage
+                      holdings={holdings}
+                      prices={prices}
+                      onUpdateHolding={handleOptimisticUpdate}
+                      onDeleteHolding={promptDeleteHolding}
+                      onEditClick={(holding) => {
+                        setHoldingToEdit(holding);
+                        setTargetWalletId(holding.walletId || '');
+                        setIsFormModalOpen(true);
+                      }}
+                      onOpenAddModalWithWallet={(wId) => {
+                        setHoldingToEdit(null);
+                        setTargetWalletId(wId);
+                        setIsFormModalOpen(true);
+                      }}
+                      onOpenEditWallet={(w) => {
+                        setWalletToEdit(w);
+                        setIsWalletModalOpen(true);
+                      }}
+                      onDeleteWallet={promptDeleteWallet}
+                      onClearWalletHoldings={promptClearWalletHoldings}
+                      onUpdatePrice={handleUpdatePrice}
+                      onResetPrice={handleResetPrice}
+                      rowStatuses={rowStatuses}
+                    />
+                  );
+                })()
               }
             />
           </Routes>

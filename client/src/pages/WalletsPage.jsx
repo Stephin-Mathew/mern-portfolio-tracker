@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useWallets } from '../context/WalletContext';
-import { Wallet, Plus, Edit2, Trash2, ChevronRight, Coins, Landmark, CreditCard, Vault, Shield } from 'lucide-react';
+import { Wallet, Plus, Edit2, Trash2, ChevronRight, Coins, Landmark, CreditCard, Vault, Shield, IndianRupee } from 'lucide-react';
 
 const ICON_MAP = {
   wallet: Wallet,
@@ -10,6 +10,7 @@ const ICON_MAP = {
   'credit-card': CreditCard,
   landmark: Landmark,
   vault: Vault,
+  rupee: IndianRupee,
 };
 
 export const WalletsPage = ({
@@ -121,11 +122,16 @@ export const WalletsPage = ({
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num || 0);
 
+  const formatINRDirect = (num) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num || 0);
+
   const formatINR = (num) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format((num || 0) * inrRate);
 
-  const formatValue = (num, walletType) =>
-    walletType === 'stock' ? formatINR(num) : formatUSD(num);
+  const formatValue = (num, walletType) => {
+    if (walletType === 'cash') return formatINRDirect(num);
+    return walletType === 'stock' ? formatINR(num) : formatUSD(num);
+  };
 
   if (loading) {
     return (
@@ -254,11 +260,13 @@ export const WalletsPage = ({
 
                   {/* Wallet Valuation */}
                   <div className="dark:bg-slate-900/60 bg-slate-50 rounded-2xl p-4 mb-4 border dark:border-slate-800/60 border-slate-200">
-                    <div className="text-xs dark:text-slate-400 text-slate-500 mb-1">Total Valuation</div>
+                    <div className="text-xs dark:text-slate-400 text-slate-500 mb-1">
+                      {wallet.type === 'cash' ? 'Total Cash Balance' : 'Total Valuation'}
+                    </div>
                     <div className="text-2xl font-extrabold dark:text-white text-slate-900 font-heading">
                       {formatValue(stats.totalValue, wallet.type)}
                     </div>
-                    {stats.count > 0 && (
+                    {stats.count > 0 && wallet.type !== 'cash' && (
                       <div className="mt-2 flex items-center justify-between text-xs">
                         <span className="dark:text-slate-400 text-slate-500">Unrealized P&L</span>
                         <span className={`font-mono font-bold ${isProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
@@ -266,6 +274,11 @@ export const WalletsPage = ({
                           {formatValue(stats.pnl, wallet.type)} ({isProfit ? '+' : ''}
                           {stats.pnlPct.toFixed(2)}%)
                         </span>
+                      </div>
+                    )}
+                    {wallet.type === 'cash' && stats.count > 0 && (
+                      <div className="mt-2 text-xs dark:text-slate-400 text-slate-500">
+                        Across {stats.count} cash entr{stats.count === 1 ? 'y' : 'ies'} · INR only
                       </div>
                     )}
                   </div>
