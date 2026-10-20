@@ -41,6 +41,7 @@ export const PriceEditModal = ({
   const [isLocked, setIsLocked] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [bustingCache, setBustingCache] = useState(false);
   const [error, setError] = useState('');
 
   // Live API quote verification state
@@ -133,10 +134,6 @@ export const PriceEditModal = ({
         setError('Please enter a target ticker symbol to map to (e.g. ETH, BTC, CANBK.NS)');
         return;
       }
-      if (cleanMapped === safeSymbol.toUpperCase()) {
-        setError(`Cannot map ${safeSymbol} to itself`);
-        return;
-      }
       setSaving(true);
       try {
         await onSavePrice(safeSymbol, {
@@ -165,6 +162,28 @@ export const PriceEditModal = ({
       setError(err.response?.data?.message || err.message || 'Failed to reset price');
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleCacheBust = async () => {
+    setError('');
+    setBustingCache(true);
+    try {
+      const res = await api.delete(`/prices/cache/${encodeURIComponent(safeSymbol)}`);
+      // Refresh the display price after cache bust
+      if (res.data?.price) {
+        const freshPrice = res.data.price;
+        const inrVal = freshPrice.priceInr ?? freshPrice.navInr ?? 0;
+        const displayVal = isINRAsset && inrVal > 0 ? inrVal : (freshPrice.price ?? 0);
+        setPriceInput(displayVal > 0 ? String(displayVal) : '');
+      }
+      onClose();
+      // Trigger parent refresh so new price shows immediately
+      if (typeof onResetPrice === 'function') onResetPrice(safeSymbol);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to clear price cache');
+    } finally {
+      setBustingCache(false);
     }
   };
 
@@ -464,18 +483,31 @@ export const PriceEditModal = ({
 
         {/* Modal Footer */}
         <div className="pt-4 border-t dark:border-slate-800 border-slate-200 flex items-center justify-between gap-3">
-          {isCustom ? (
+          <div className="flex items-center gap-2">
+            {isCustom && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={saving || resetting || bustingCache}
+                className="px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+              >
+                {resetting ? 'Resetting...' : 'Reset to Live'}
+              </button>
+            )}
             <button
               type="button"
-              onClick={handleReset}
-              disabled={saving || resetting}
-              className="px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+              onClick={handleCacheBust}
+              disabled={saving || resetting || bustingCache}
+              title="Delete the cached price from the database and fetch a fresh one from the correct source"
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-amber-500 hover:bg-amber-500/10 border border-amber-500/20 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
             >
-              {resetting ? 'Resetting...' : 'Reset to Live Market Price'}
+              {bustingCache ? (
+                <><RefreshCw className="w-3.5 h-3.5 animate-spin" /><span>Refreshing...</span></>
+              ) : (
+                <><RefreshCw className="w-3.5 h-3.5" /><span>Force Refresh Cache</span></>
+              )}
             </button>
-          ) : (
-            <div />
-          )}
+          </div>
 
           <div className="flex items-center space-x-2">
             <button

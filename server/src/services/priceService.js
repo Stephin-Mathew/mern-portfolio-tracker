@@ -594,6 +594,7 @@ const COINGECKO_ID_MAP = {
   // Hyperliquid ecosystem
   HYPE: 'hyperliquid',
   WHYPE: 'wrapped-hyperliquid',
+  HPL: 'hyperlend',
   // Popular mid/small caps
   ENA: 'ethena',
   EIGEN: 'eigenlayer',
@@ -958,8 +959,13 @@ export const fetchAndCachePrices = async (symbols = []) => {
   }
 
   // ── 4b. Auto-probe Indian Stock tickers (.NS) on Yahoo Finance for unresolved symbols ──
+  // IMPORTANT: Only probe symbols explicitly registered as stocks in the DB.
+  // Do NOT probe all unresolved symbols — crypto tokens that CMC/CoinGecko don't know
+  // would otherwise be incorrectly queried on Yahoo Finance as Indian stocks.
   const unresolved = symbols.filter((s) => !result[s] && !FIAT_STABLE.has(s) && !isMfSchemeCode(s));
-  const candidateStocks = unresolved.filter((s) => /^[A-Z0-9]{2,15}$/.test(s) && !s.includes('.'));
+  const candidateStocks = unresolved.filter(
+    (s) => /^[A-Z0-9]{2,15}$/.test(s) && !s.includes('.') && knownStockSymbols.has(s)
+  );
   if (candidateStocks.length > 0) {
     const nsTickers = candidateStocks.map((s) => `${s}.NS`);
     try {

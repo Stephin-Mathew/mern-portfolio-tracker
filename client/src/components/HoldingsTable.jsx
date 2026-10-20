@@ -179,6 +179,10 @@ export const HoldingsTable = ({
         pnlPercent = changePct;
       }
 
+      // Normalize totalValue and pnl to INR for sorting (crypto is in USD, stocks/MFs are in INR)
+      const sortValue = isINR ? totalValue : totalValue * inrRate;
+      const sortPnl = isINR ? pnl : pnl * inrRate;
+
       return {
         ...group,
         isINR,
@@ -190,14 +194,21 @@ export const HoldingsTable = ({
         totalCost: totalStockCost,
         pnl,
         pnlPercent,
+        sortValue,
+        sortPnl,
       };
     });
 
     // Sort groups dynamically
     return groups.sort((a, b) => {
       if (!sortField) return 0;
-      let valA = a[sortField];
-      let valB = b[sortField];
+
+      // Use INR-normalized sort fields for value/pnl comparisons
+      const fieldA = sortField === 'totalValue' ? 'sortValue' : sortField === 'pnl' ? 'sortPnl' : sortField;
+      const fieldB = sortField === 'totalValue' ? 'sortValue' : sortField === 'pnl' ? 'sortPnl' : sortField;
+
+      let valA = a[fieldA];
+      let valB = b[fieldB];
 
       if (['symbol', 'assetType'].includes(sortField)) {
         valA = String(valA || '').toLowerCase();
@@ -544,11 +555,16 @@ export const HoldingsTable = ({
                         ) : (
                           <div
                             onClick={() => handleCellClick(h, 'symbol', h.symbol)}
-                            className="cursor-pointer group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition flex items-center space-x-1.5"
+                            className="cursor-pointer group-hover:text-cyan-500 dark:group-hover:text-cyan-400 transition flex items-center space-x-1.5 flex-wrap gap-1"
                             title="Click to edit symbol"
                           >
                             <span className="font-extrabold font-heading text-base">{h.symbol}</span>
                             {getAssetBadge(h.assetType)}
+                            {h.walletOrAccount && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold">
+                                {h.walletOrAccount}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -914,6 +930,11 @@ export const HoldingsTable = ({
                                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-slate-500/10 text-slate-600 dark:text-slate-300 border dark:border-slate-700 border-slate-300 font-mono">
                                           #{index + 1}
                                         </span>
+                                        {subItem.walletOrAccount && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold">
+                                            {subItem.walletOrAccount}
+                                          </span>
+                                        )}
                                         {subItem.notes && (
                                           <span className="text-[11px] text-slate-500 dark:text-slate-400 italic font-normal truncate max-w-xs">
                                             {subItem.notes}

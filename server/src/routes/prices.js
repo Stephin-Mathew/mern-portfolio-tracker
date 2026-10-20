@@ -11,6 +11,7 @@ import {
 } from '../services/priceService.js';
 import { Holding } from '../models/Holding.js';
 import { PriceOverride } from '../models/PriceOverride.js';
+import { PriceCache } from '../models/PriceCache.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -145,6 +146,35 @@ router.delete('/override/:symbol', async (req, res) => {
   } catch (error) {
     console.error('Remove Price Override Error:', error);
     res.status(500).json({ message: error.message || 'Failed to remove price override' });
+  }
+});
+
+/**
+ * @route   DELETE /api/prices/cache/:symbol
+ * @desc    Delete a stale PriceCache entry and force a fresh live fetch.
+ *          Useful when a symbol was previously mis-routed (e.g. crypto fetched via Yahoo).
+ * @access  Private
+ */
+router.delete('/cache/:symbol', async (req, res) => {
+  try {
+    const sym = req.params.symbol.trim().toUpperCase();
+    // Also delete any .NS variant that may have been incorrectly cached
+    const toDelete = [sym, `${sym}.NS`, `${sym}.BO`];
+    const del = await PriceCache.deleteMany({ symbol: { $in: toDelete } });
+    console.log(`🗑️  Cache-busted ${del.deletedCount} entry/entries for: [${toDelete.join(', ')}]`);
+
+    // Immediately re-fetch the correct price
+    const fresh = await fetchAndCachePrices([sym]);
+    const priceMap = await getPricesForSymbols([sym], req.user._id);
+
+    res.json({
+      message: `Cache cleared for ${sym} (${del.deletedCount} entry/entries deleted). Fresh price fetched.`,
+      symbol: sym,
+      price: priceMap[sym],
+    });
+  } catch (error) {
+    console.error('Cache Bust Error:', error);
+    res.status(500).json({ message: error.message || 'Failed to clear price cache' });
   }
 });
 

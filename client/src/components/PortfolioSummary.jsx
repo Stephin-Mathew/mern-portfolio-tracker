@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, PieChart, Clock, Zap } from 'lucide-react';
 
-export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
+export const PortfolioSummary = ({ holdings = [], prices = {}, loading, onCurrencyChange }) => {
   const [summaryView, setSummaryView] = useState('24h'); // '24h' | '7d' | 'stocks'
   const [selectedCurrency, setSelectedCurrency] = useState(() => {
     try {
@@ -18,6 +18,7 @@ export const PortfolioSummary = ({ holdings = [], prices = {}, loading }) => {
     } catch (e) {
       console.warn('Could not save currency preference:', e);
     }
+    if (onCurrencyChange) onCurrencyChange(curr);
   };
 
   // Live prices for currency conversions

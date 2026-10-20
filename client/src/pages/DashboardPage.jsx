@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PortfolioSummary } from '../components/PortfolioSummary';
 import { PortfolioChartWidget } from '../components/PortfolioChartWidget';
 import { WalletsSummaryWidget } from '../components/WalletsSummaryWidget';

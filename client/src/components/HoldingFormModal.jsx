@@ -19,6 +19,7 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
     quantity: '',
     avgBuyPrice: '',
     walletId: '',
+    walletOrAccount: '',
     notes: '',
     mfSchemeCode: null,
     mfSchemeName: null,
@@ -75,13 +76,24 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
 
   useEffect(() => {
     if (holdingToEdit) {
+      let dest = holdingToEdit.walletOrAccount || '';
+      let userNote = holdingToEdit.notes || '';
+      if (!dest && holdingToEdit.assetType === 'cash' && holdingToEdit.notes) {
+        const m = holdingToEdit.notes.match(/^location:([^|\n]+?)(?:\s\|\s(.*))?$/);
+        if (m) {
+          dest = m[1].trim();
+          userNote = m[2] ? m[2].trim() : '';
+        }
+      }
+
       setFormData({
         assetType: holdingToEdit.assetType || 'crypto',
         symbol: holdingToEdit.symbol || '',
         quantity: holdingToEdit.quantity !== undefined ? holdingToEdit.quantity : '',
         avgBuyPrice: holdingToEdit.avgBuyPrice !== undefined ? holdingToEdit.avgBuyPrice : '',
         walletId: holdingToEdit.walletId ? String(holdingToEdit.walletId) : '',
-        notes: holdingToEdit.notes || '',
+        walletOrAccount: dest,
+        notes: userNote,
         mfSchemeCode: holdingToEdit.mfSchemeCode || null,
         mfSchemeName: holdingToEdit.mfSchemeName || null,
       });
@@ -97,6 +109,7 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
         quantity: '',
         avgBuyPrice: '',
         walletId: targetWalletId || '',
+        walletOrAccount: '',
         notes: '',
         mfSchemeCode: null,
         mfSchemeName: null,
@@ -112,7 +125,26 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
   if (!isOpen) return null;
 
   const handleAssetTypeChange = (type) => {
-    setFormData({ ...formData, assetType: type, mfSchemeCode: null, mfSchemeName: null });
+    let nextSymbol = formData.symbol;
+    if (type === 'cash') {
+      nextSymbol = 'INR';
+    } else if (formData.assetType === 'cash' && nextSymbol === 'INR') {
+      nextSymbol = '';
+    }
+    let nextWalletId = formData.walletId;
+    if (type === 'cash' && !nextWalletId && wallets && wallets.length > 0) {
+      const cashWallet = wallets.find((w) => w.type === 'cash');
+      if (cashWallet) nextWalletId = cashWallet._id;
+    }
+
+    setFormData({
+      ...formData,
+      assetType: type,
+      symbol: nextSymbol,
+      walletId: nextWalletId,
+      mfSchemeCode: null,
+      mfSchemeName: null,
+    });
     setSelectedScheme(null);
     setMfQuery('');
     setMfResults([]);
@@ -148,13 +180,18 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
         setError('Please search and select a mutual fund scheme from the dropdown');
         return;
       }
+    } else if (formData.assetType === 'cash') {
+      if (!formData.walletOrAccount?.trim()) {
+        setError('Please enter where this cash is held (e.g. Purse, Google Pay, HDFC Account)');
+        return;
+      }
     } else if (!formData.symbol.trim()) {
       setError('Please enter an asset symbol or fund name (e.g., BTC, AAPL, CANBK)');
       return;
     }
 
     if (!formData.quantity || Number(formData.quantity) <= 0) {
-      setError('Please enter a positive quantity (number of units / shares)');
+      setError('Please enter a positive quantity / amount');
       return;
     }
 
@@ -163,13 +200,21 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
       return;
     }
 
+    const trimmedDest = (formData.walletOrAccount || '').trim();
+    const finalNotes = (formData.assetType === 'cash' && trimmedDest)
+      ? (formData.notes?.trim() ? `location:${trimmedDest} | ${formData.notes.trim()}` : `location:${trimmedDest}`)
+      : formData.notes?.trim() || '';
+
     setSubmitting(true);
     try {
       await onSave({
         ...formData,
-        symbol: formData.symbol.trim().toUpperCase(),
+        symbol: (formData.symbol || 'INR').trim().toUpperCase(),
         quantity: Number(formData.quantity),
         walletId: formData.walletId || null,
+        walletOrAccount: trimmedDest,
+        notes: finalNotes,
+        currency: formData.assetType === 'cash' ? (formData.symbol?.trim().toUpperCase() || 'INR') : undefined,
         avgBuyPrice:
           (formData.assetType === 'stock' || formData.assetType === 'mutual_fund')
             ? formData.avgBuyPrice
@@ -258,6 +303,11 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
               🏦 <strong>MFapi.in (Live NAV):</strong> Search for your Indian mutual fund scheme below. The latest NAV is fetched daily from AMFI via MFapi.in — completely free, no API key required.
             </div>
           )}
+          {formData.assetType === 'cash' && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs leading-relaxed">
+              💵 <strong>INR Cash:</strong> Record your physical or digital cash (e.g. Purse, Google Pay, Bank Account). Enter the destination to organize your balances.
+            </div>
+          )}
 
           {/* ── Mutual Fund Scheme Search ─────────────────────────────────── */}
           {isMutualFund && (
@@ -339,8 +389,62 @@ export const HoldingFormModal = ({ isOpen, onClose, onSave, holdingToEdit, walle
             </div>
           )}
 
-          {/* ── Symbol & Quantity Grid (non-MF) ──────────────────────────── */}
-          {!isMutualFund && (
+          {/* ── Cash Inputs ──────────────────────────────────────────────── */}
+          {formData.assetType === 'cash' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
+                  Cash Destination / Where is it held? *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Purse, Google Pay, HDFC Savings, Locker, Drawer…"
+                  value={formData.walletOrAccount}
+                  onChange={(e) => setFormData({ ...formData, walletOrAccount: e.target.value })}
+                  className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm font-semibold"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
+                    Currency
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.symbol || 'INR'}
+                    onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
+                    className="w-full glass-input rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold"
+                    placeholder="INR"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
+                    Amount (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-3.5 flex items-center text-sm font-bold dark:text-slate-400 text-slate-500 pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="e.g. 5000"
+                      value={formData.quantity}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                      className="w-full glass-input rounded-xl pl-8 pr-3.5 py-2.5 text-sm font-mono font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Symbol & Quantity Grid (Crypto & Stock) ───────────────────── */}
+          {!isMutualFund && formData.assetType !== 'cash' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold dark:text-slate-300 text-slate-700 uppercase mb-1">
