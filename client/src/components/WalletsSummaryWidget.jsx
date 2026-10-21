@@ -13,7 +13,7 @@ const ICON_MAP = {
   rupee: IndianRupee,
 };
 
-export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
+export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet, displayCurrency = 'USD' }) => {
   const { wallets, loading } = useWallets();
   const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
 
@@ -80,8 +80,10 @@ export const WalletsSummaryWidget = ({ holdings, prices, onOpenAddWallet }) => {
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num || 0);
 
   const formatValue = (num, walletType) => {
-    if (walletType === 'cash') return formatINRDirect(num);
-    return walletType === 'stock' ? formatINR(num) : formatUSD(num);
+    if (displayCurrency === 'INR') {
+      return formatINR(num);
+    }
+    return formatUSD(num);
   };
 
   // Sort wallets descending by total dollar balance (highest $ count account first)

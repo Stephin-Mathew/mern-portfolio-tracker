@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown, Maximize2, ExternalLink, Calendar, RefreshCw,
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/axiosInstance';
 
-export const PortfolioChartWidget = ({ holdings = [], prices = {} }) => {
+export const PortfolioChartWidget = ({ holdings = [], prices = {}, displayCurrency = 'USD' }) => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
   const [timeframe, setTimeframe] = useState('30d');
@@ -106,8 +106,20 @@ export const PortfolioChartWidget = ({ holdings = [], prices = {} }) => {
 
   const activeDisplayPoint = hoveredPoint || (points.length > 0 ? points[points.length - 1] : null);
 
+  const inrRate = Number(prices.INR?.price || prices.INR?.rate || 95.7);
+
   const formatUSD = (num) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(num || 0);
+
+  const formatINR = (num) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format((num || 0) * inrRate);
+
+  const formatValue = (num) => {
+    if (displayCurrency === 'INR') {
+      return formatINR(num);
+    }
+    return formatUSD(num);
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -136,7 +148,7 @@ export const PortfolioChartWidget = ({ holdings = [], prices = {} }) => {
 
           <div className="flex items-baseline space-x-3 mt-1">
             <span className="text-2xl sm:text-3xl font-extrabold dark:text-white text-slate-900 font-heading tracking-tight">
-              {formatUSD(activeDisplayPoint ? activeDisplayPoint.totalValue : summary.currentValue)}
+              {formatValue(activeDisplayPoint ? activeDisplayPoint.totalValue : summary.currentValue)}
             </span>
 
             <div

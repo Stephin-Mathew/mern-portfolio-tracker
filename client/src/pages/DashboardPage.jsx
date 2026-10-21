@@ -67,16 +67,38 @@ export const DashboardPage = ({
     cash: holdings.filter((h) => h.assetType === 'cash').length,
   };
 
+  const [displayCurrency, setDisplayCurrency] = useState(() => {
+    try {
+      return localStorage.getItem('portfolio_currency') || 'USD';
+    } catch {
+      return 'USD';
+    }
+  });
+
   return (
     <div className="space-y-6">
       {/* 1. Overall Portfolio Summary across ALL wallets */}
-      <PortfolioSummary holdings={holdings} prices={prices} loading={loading} />
+      <PortfolioSummary
+        holdings={holdings}
+        prices={prices}
+        loading={loading}
+        onCurrencyChange={setDisplayCurrency}
+      />
 
       {/* 2. Interactive Front Page Portfolio Value Chart (Clickable -> Study Chart Page) */}
-      <PortfolioChartWidget holdings={holdings} prices={prices} />
+      <PortfolioChartWidget
+        holdings={holdings}
+        prices={prices}
+        displayCurrency={displayCurrency}
+      />
 
       {/* 3. Wallets Summary Cards Breakdown */}
-      <WalletsSummaryWidget holdings={holdings} prices={prices} onOpenAddWallet={onOpenAddWalletModal} />
+      <WalletsSummaryWidget
+        holdings={holdings}
+        prices={prices}
+        onOpenAddWallet={onOpenAddWalletModal}
+        displayCurrency={displayCurrency}
+      />
 
       {/* 3. Asset Type Filter Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -98,6 +120,7 @@ export const DashboardPage = ({
         onResetPrice={onResetPrice}
         rowStatuses={rowStatuses}
         hideBuyPrice={activeTab === 'crypto'}
+        displayCurrency={displayCurrency}
       />
     </div>
   );
