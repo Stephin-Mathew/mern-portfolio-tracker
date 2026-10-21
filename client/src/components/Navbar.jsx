@@ -10,7 +10,6 @@ import {
   User,
   Wallet,
   ShieldCheck,
-  Menu,
   Sun,
   Moon,
   ChevronDown,
@@ -19,6 +18,7 @@ import {
 
 export const Navbar = ({
   onToggleSidebar,
+  isSidebarCollapsed = false,
   onOpenAddModal,
   onOpenUploadModal,
   onOpenJsonExtractModal,
@@ -59,35 +59,33 @@ export const Navbar = ({
   return (
     <header className="sticky top-0 z-30 glass-panel border-b dark:border-slate-800/80 border-slate-200/90 backdrop-blur-md transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Left Section: Sidebar Toggle & App Title / Active Wallet Indicator */}
+        {/* Left Section: Active Wallet Indicator / View Title (Sidebar contains the only hamburger menu) */}
         <div className="flex items-center space-x-3">
-          {isAuthenticated && (
-            <button
-              onClick={onToggleSidebar}
-              className="lg:hidden p-2 rounded-xl dark:bg-slate-900/80 bg-slate-100 hover:bg-slate-200 dark:hover:bg-slate-800 border dark:border-slate-800 border-slate-300 text-slate-700 dark:text-slate-300 transition cursor-pointer shadow-sm"
-              title="Toggle Sidebar Menu"
-            >
-              <Menu className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
-            </button>
-          )}
-
-          <div className="flex items-center space-x-2">
-            {!isAuthenticated && (
+          {!isAuthenticated ? (
+            <div className="flex items-center space-x-2">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-md shadow-cyan-500/20">
                 <Wallet className="w-5 h-5 text-white" />
               </div>
-            )}
-            <div>
               <span className="font-heading font-extrabold text-lg dark:text-white text-slate-900">
                 Apex<span className="text-cyan-500 dark:text-cyan-400">Portfolio</span>
               </span>
-              {activeWalletName && (
-                <span className="hidden sm:inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                  {activeWalletName}
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2">
+              {activeWalletName ? (
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-medium text-slate-400 dark:text-slate-500 hidden sm:inline">Active Wallet:</span>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                    {activeWalletName}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 tracking-wide uppercase">
+                  Overview
                 </span>
               )}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Action Controls */}

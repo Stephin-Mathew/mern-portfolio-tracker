@@ -34,6 +34,23 @@ function AppContent() {
 
   // Sidebar toggle state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('apex_sidebar_collapsed') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const handleToggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('apex_sidebar_collapsed', String(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Detect active wallet from current URL (/wallets/:id)
   const walletPathMatch = location.pathname.match(/^\/wallets\/([a-f0-9]{24})$/i);
@@ -411,6 +428,8 @@ function AppContent() {
       {/* Sidebar Navigation */}
       <Sidebar
         isOpen={isSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={handleToggleSidebarCollapse}
         onClose={() => setIsSidebarOpen(false)}
         onOpenAddWalletModal={() => {
           setWalletToEdit(null);
@@ -421,10 +440,21 @@ function AppContent() {
       />
 
       {/* Main Layout Container */}
-      <div className={`${isAuthenticated ? 'lg:pl-64' : ''} flex-1 flex flex-col transition-all duration-300`}>
+      <div
+        className={`${
+          isAuthenticated ? (isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64') : ''
+        } flex-1 flex flex-col transition-all duration-300`}
+      >
         {/* Top Navbar Header */}
         <Navbar
-          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => {
+            if (window.innerWidth < 1024) {
+              setIsSidebarOpen((prev) => !prev);
+            } else {
+              handleToggleSidebarCollapse();
+            }
+          }}
           onOpenAddModal={() => {
             setHoldingToEdit(null);
             setTargetWalletId(activeWalletId || '');
