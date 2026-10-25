@@ -1,40 +1,44 @@
 import React from 'react';
 import { Layers, Coins, TrendingUp, Wallet, PieChart } from 'lucide-react';
 
-export const AssetTypeTabs = ({ activeTab, setActiveTab, counts }) => {
-  const tabs = [
-    { id: 'all', label: 'All Holdings', icon: Layers, count: counts.all },
-    { id: 'crypto', label: 'Crypto', icon: Coins, count: counts.crypto },
-    { id: 'stock', label: 'Stocks', icon: TrendingUp, count: counts.stock },
-    { id: 'mutual_fund', label: 'Mutual Funds', icon: PieChart, count: counts.mutual_fund || 0 },
-    { id: 'cash', label: 'Cash & Fiat', icon: Wallet, count: counts.cash },
-  ];
+const TABS = [
+  { id: 'all', label: 'All', icon: Layers },
+  { id: 'crypto', label: 'Crypto', icon: Coins },
+  { id: 'stock', label: 'Stocks', icon: TrendingUp },
+  { id: 'mutual_fund', label: 'Funds', icon: PieChart },
+  { id: 'cash', label: 'Cash', icon: Wallet },
+];
 
+export const AssetTypeTabs = ({ activeTab, setActiveTab, counts }) => {
   return (
-    <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto pb-2 border-b dark:border-slate-800 border-slate-200">
-      {tabs.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeTab === tab.id;
+    <div className="seg" role="tablist" aria-label="Asset type filter" style={{ flexWrap: 'wrap' }}>
+      {TABS.map(({ id, label, icon: Icon }) => {
+        const isActive = activeTab === id;
+        const count = counts[id] ?? 0;
         return (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-              isActive
-                ? 'dark:bg-cyan-500/15 bg-cyan-50 border dark:border-cyan-500/30 border-cyan-500/40 text-cyan-600 dark:text-cyan-400 shadow-sm shadow-cyan-500/10'
-                : 'dark:text-slate-400 text-slate-600 dark:hover:text-slate-200 hover:text-slate-900 dark:hover:bg-slate-800/60 hover:bg-slate-100 border border-transparent'
-            }`}
+            key={id}
+            role="tab"
+            aria-selected={isActive}
+            className={`seg-btn${isActive ? ' active' : ''}`}
+            onClick={() => setActiveTab(id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-500 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500'}`} />
-            <span>{tab.label}</span>
+            <Icon size={13} strokeWidth={1.8} />
+            {label}
             <span
-              className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                isActive
-                  ? 'dark:bg-cyan-500/20 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300'
-                  : 'dark:bg-slate-800 bg-slate-200/70 dark:text-slate-400 text-slate-600'
-              }`}
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '1px 6px',
+                borderRadius: 20,
+                background: isActive ? 'var(--card-border)' : 'transparent',
+                color: isActive ? 'var(--text-secondary)' : 'var(--text-caption)',
+                minWidth: 18,
+                textAlign: 'center',
+              }}
             >
-              {tab.count}
+              {count}
             </span>
           </button>
         );
@@ -42,4 +46,3 @@ export const AssetTypeTabs = ({ activeTab, setActiveTab, counts }) => {
     </div>
   );
 };
-

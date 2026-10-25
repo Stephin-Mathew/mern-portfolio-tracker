@@ -23,37 +23,35 @@ function ClerkWithTheme({ children }) {
       appearance={{
         baseTheme: isDark ? dark : undefined,
         variables: {
-          colorPrimary: '#06b6d4',
-          colorText: isDark ? '#f8fafc' : '#0f172a',
-          colorTextSecondary: isDark ? '#94a3b8' : '#64748b',
-          colorBackground: isDark ? '#0d121f' : '#ffffff',
-          colorInputBackground: isDark ? '#131b2e' : '#f8fafc',
-          colorInputText: isDark ? '#f8fafc' : '#0f172a',
+          colorPrimary: '#17171B',
+          colorText: isDark ? '#F2F2F4' : '#131316',
+          colorTextSecondary: isDark ? '#9A9EA8' : '#5F636B',
+          colorBackground: isDark ? '#1A1A1F' : '#FFFFFF',
+          colorInputBackground: isDark ? '#232329' : '#F3F3F5',
+          colorInputText: isDark ? '#F2F2F4' : '#131316',
+          colorNeutral: isDark ? '#F2F2F4' : '#131316',
           borderRadius: '0.75rem',
         },
         elements: {
           card: isDark
-            ? 'bg-[#0d121f] border border-slate-800 shadow-2xl rounded-2xl'
-            : 'bg-white border border-slate-200 shadow-xl rounded-2xl',
-          formButtonPrimary:
-            'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold shadow-lg shadow-cyan-500/20 transition cursor-pointer',
+            ? 'bg-[#1A1A1F] border border-[#2A2A31] shadow-2xl rounded-2xl'
+            : 'bg-white border border-[#ECEDEF] shadow-xl rounded-2xl',
+          formButtonPrimary: isDark
+            ? 'bg-[#F2F2F4] hover:opacity-90 text-[#131316] font-semibold transition cursor-pointer'
+            : 'bg-[#17171B] hover:opacity-90 text-white font-semibold transition cursor-pointer',
           footerActionLink: isDark
-            ? 'text-cyan-400 hover:text-cyan-300 font-semibold'
-            : 'text-cyan-600 hover:text-cyan-700 font-semibold',
+            ? 'text-[#F2F2F4] hover:opacity-80 font-semibold'
+            : 'text-[#17171B] hover:opacity-80 font-semibold',
           modalBackdrop: isDark
-            ? 'bg-slate-950/80 backdrop-blur-md'
-            : 'bg-slate-900/40 backdrop-blur-md',
-          headerTitle: isDark ? 'text-white font-heading font-bold' : 'text-slate-900 font-heading font-bold',
-          headerSubtitle: isDark ? 'text-slate-400' : 'text-slate-600',
+            ? 'bg-black/60 backdrop-blur-md'
+            : 'bg-black/40 backdrop-blur-md',
+          headerTitle: 'font-semibold',
           socialButtonsBlockButton: isDark
-            ? 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200'
-            : 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-slate-700',
-          formFieldLabel: isDark ? 'text-slate-300 font-semibold text-xs' : 'text-slate-700 font-semibold text-xs',
+            ? 'bg-[#232329] hover:bg-[#34343C] border-[#2A2A31] text-[#F2F2F4]'
+            : 'bg-[#F3F3F5] hover:bg-[#ECEDEF] border-[#ECEDEF] text-[#131316]',
           formFieldInput: isDark
-            ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500'
-            : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400',
-          dividerText: isDark ? 'text-slate-500' : 'text-slate-400',
-          dividerLine: isDark ? 'bg-slate-800' : 'bg-slate-200',
+            ? 'bg-[#232329] border-[#2A2A31] text-[#F2F2F4] placeholder-[#9A9EA8]'
+            : 'bg-[#F3F3F5] border-[#ECEDEF] text-[#131316] placeholder-[#6B6F78]',
         },
       }}
     >
@@ -73,5 +71,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </ThemeProvider>
   </React.StrictMode>
 );
-
-

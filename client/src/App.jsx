@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { WalletProvider, useWallets } from './context/WalletContext';
+import { CurrencyProvider } from './context/CurrencyContext';
 import api, { waitForTokenProvider } from './api/axiosInstance';
-import { Navbar } from './components/Navbar';
-import { Sidebar } from './components/Sidebar';
-import { DashboardPage } from './pages/DashboardPage';
+import { IconRail, ExpandedSidebar } from './components/AppShell/IconRail';
+import { TopBar, TabBar } from './components/AppShell/TopBar';
+import { BottomTabBar } from './components/AppShell/BottomTabBar';
+import { OverviewPage } from './pages/OverviewPage';
+import { HoldingsPage } from './pages/HoldingsPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { WalletsPage } from './pages/WalletsPage';
 import { WalletDetailPage } from './pages/WalletDetailPage';
@@ -20,6 +23,9 @@ import { AuthModal } from './components/AuthModal';
 import { LoadingScreen } from './components/LoadingScreen';
 import { sortWalletsByValue } from './utils/walletUtils';
 
+// Routes where the tab bar (Overview | Holdings | Wallets) is shown
+const TAB_BAR_ROUTES = ['/', '/holdings', '/wallets'];
+
 function AppContent() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { wallets, createWallet, updateWallet, deleteWallet, fetchWallets, loading: walletsLoading } = useWallets();
@@ -32,13 +38,12 @@ function AppContent() {
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [refreshingPrices, setRefreshingPrices] = useState(false);
 
-  // Sidebar toggle state
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Sidebar collapsed state (key reused from original)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem('apex_sidebar_collapsed') === 'true';
     } catch (e) {
-      return false;
+      return true; // default collapsed (icon rail only)
     }
   });
 
@@ -57,10 +62,7 @@ function AppContent() {
   const activeWalletId = walletPathMatch ? walletPathMatch[1] : '';
   const activeWallet = wallets.find((w) => w._id === activeWalletId);
 
-  // Wallets sorted in descending order of total USD value (highest dollar count first)
-  const sortedWallets = useMemo(() => {
-    return sortWalletsByValue(wallets, holdings, prices);
-  }, [wallets, holdings, prices]);
+  const sortedWallets = useMemo(() => sortWalletsByValue(wallets, holdings, prices), [wallets, holdings, prices]);
 
   // Tab Filtering ('all' | 'crypto' | 'stock' | 'cash')
   const [activeTab, setActiveTab] = useState('all');
@@ -92,9 +94,7 @@ function AppContent() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Fetch holdings & prices from API
-  // IMPORTANT: Does NOT reset holdings/prices to empty during re-fetch.
-  // This prevents the $0 portfolio value flash while new data is loading.
+  // Fetch holdings & prices from API (logic unchanged)
   const fetchPortfolioData = useCallback(async () => {
     if (authLoading) return;
     if (!isAuthenticated) {
@@ -102,13 +102,10 @@ function AppContent() {
       setPrices({});
       return;
     }
-
     setLoading(true);
     try {
       const holdingsRes = await api.get('/holdings');
       const fetchedHoldings = holdingsRes.data.holdings || [];
-
-      // Fetch live market quotes for symbols present in user's portfolio + conversion benchmarks
       const symbols = [...new Set([...fetchedHoldings.map((h) => h.symbol), 'BTC', 'HYPE', 'INR'])];
       let fetchedPrices = {};
       try {
@@ -117,79 +114,53 @@ function AppContent() {
       } catch (priceErr) {
         console.warn('Prices fetch warning:', priceErr.message);
       }
-
-      // Atomically update both holdings AND prices together
-      // This prevents the intermediate state where holdings are updated but prices are still {}
       setHoldings(fetchedHoldings);
       setPrices((prevPrices) => ({ ...prevPrices, ...fetchedPrices }));
     } catch (err) {
       console.warn('Portfolio data fetch warning:', err.message);
-      // Don't clear existing data on error — keep stale data visible
       throw err;
     } finally {
       setLoading(false);
     }
   }, [isAuthenticated, authLoading]);
 
-  // Synchronized initial load for wallets, holdings & prices
-  // Uses retry logic to handle the case where Clerk token isn't ready on first attempt
+  // Initial data load with retry (unchanged logic)
   useEffect(() => {
     if (authLoading) return;
-
     if (!isAuthenticated) {
       setHoldings([]);
       setPrices({});
       setInitialDataLoaded(true);
       return;
     }
-
     let isMounted = true;
-
     const loadAllData = async (attempt = 1) => {
       try {
-        // Wait for token provider to be registered before making any API calls
         await waitForTokenProvider();
-
-        // Fetch wallets and portfolio data in parallel
-        // Using Promise.all (not allSettled) — if either fails, we retry
         await Promise.all([fetchWallets(), fetchPortfolioData()]);
-
-        if (isMounted) {
-          setInitialDataLoaded(true);
-        }
+        if (isMounted) setInitialDataLoaded(true);
       } catch (err) {
         console.warn(`Initial data load attempt ${attempt} failed:`, err.message);
-
-        // Retry up to 3 times with increasing delay (500ms, 1000ms, 2000ms)
         if (attempt < 3 && isMounted) {
           const delay = Math.min(500 * Math.pow(2, attempt - 1), 2000);
           await new Promise((r) => setTimeout(r, delay));
           if (isMounted) return loadAllData(attempt + 1);
         }
-
-        // After max retries, show the dashboard anyway (with whatever data we have)
         if (isMounted) {
           console.warn('Max retries reached — showing dashboard with available data');
           setInitialDataLoaded(true);
         }
       }
     };
-
     loadAllData();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [isAuthenticated, authLoading, fetchWallets, fetchPortfolioData]);
 
-  // Automatically close auth modal upon successful sign-in
   useEffect(() => {
-    if (isAuthenticated) {
-      setIsAuthModalOpen(false);
-    }
+    if (isAuthenticated) setIsAuthModalOpen(false);
   }, [isAuthenticated]);
 
-  // Refresh Prices Handler
+  // ── Action handlers (business logic UNCHANGED) ──────────────────────
   const handleRefreshPrices = async () => {
     if (!isAuthenticated) return;
     setRefreshingPrices(true);
@@ -204,18 +175,11 @@ function AppContent() {
     }
   };
 
-  // Update Custom Price or Ticker Mapping
   const handleUpdatePrice = async (symbol, overrideData) => {
     try {
-      const res = await api.post('/prices/override', {
-        symbol,
-        ...overrideData,
-      });
+      const res = await api.post('/prices/override', { symbol, ...overrideData });
       if (res.data.price) {
-        setPrices((prev) => ({
-          ...prev,
-          [symbol.toUpperCase()]: res.data.price,
-        }));
+        setPrices((prev) => ({ ...prev, [symbol.toUpperCase()]: res.data.price }));
       }
       showToast(res.data.message || `Price updated for ${symbol}`, 'success');
       fetchPortfolioData().catch(() => {});
@@ -227,15 +191,11 @@ function AppContent() {
     }
   };
 
-  // Reset Custom Price to Live Market Quote
   const handleResetPrice = async (symbol) => {
     try {
       const res = await api.delete(`/prices/override/${symbol}`);
       if (res.data.price) {
-        setPrices((prev) => ({
-          ...prev,
-          [symbol.toUpperCase()]: res.data.price,
-        }));
+        setPrices((prev) => ({ ...prev, [symbol.toUpperCase()]: res.data.price }));
       }
       showToast(res.data.message || `Reset ${symbol} to live market price`, 'success');
       fetchPortfolioData().catch(() => {});
@@ -247,7 +207,6 @@ function AppContent() {
     }
   };
 
-  // Save Holding (Manual Form)
   const handleSaveHolding = async (formData) => {
     if (holdingToEdit) {
       const res = await api.patch(`/holdings/${holdingToEdit._id}`, formData);
@@ -262,7 +221,6 @@ function AppContent() {
     fetchWallets().catch(() => {});
   };
 
-  // Save Wallet Form (Create or Update)
   const handleSaveWallet = async (walletData) => {
     if (walletToEdit) {
       await updateWallet(walletToEdit._id, walletData);
@@ -274,28 +232,19 @@ function AppContent() {
     fetchWallets();
   };
 
-  // Optimistic UI updates
   const handleOptimisticUpdate = async (id, updatedFields) => {
     const originalHolding = holdings.find((h) => h._id === id);
     if (!originalHolding) return;
-
     const optimisticallyUpdatedHolding = { ...originalHolding, ...updatedFields };
     setHoldings((prev) => prev.map((h) => (h._id === id ? optimisticallyUpdatedHolding : h)));
     setRowStatuses((prev) => ({ ...prev, [id]: 'saving' }));
-
     try {
       const res = await api.patch(`/holdings/${id}`, updatedFields);
       setHoldings((prev) => prev.map((h) => (h._id === id ? res.data.holding : h)));
       setRowStatuses((prev) => ({ ...prev, [id]: 'saved' }));
-
       setTimeout(() => {
-        setRowStatuses((prev) => {
-          const copy = { ...prev };
-          delete copy[id];
-          return copy;
-        });
+        setRowStatuses((prev) => { const copy = { ...prev }; delete copy[id]; return copy; });
       }, 2500);
-
       if (updatedFields.symbol && updatedFields.symbol !== originalHolding.symbol) {
         fetchPortfolioData().catch(() => {});
       }
@@ -308,48 +257,23 @@ function AppContent() {
     }
   };
 
-  // Trigger Custom Delete Modal for a Holding
   const promptDeleteHolding = (holding) => {
-    const desc = `${holding.quantity} ${holding.symbol}`;
-
-    setDeleteTarget({
-      type: 'holding',
-      id: holding._id,
-      title: 'Delete Asset Holding',
-      description: desc,
-    });
+    setDeleteTarget({ type: 'holding', id: holding._id, title: 'Delete Asset Holding', description: `${holding.quantity} ${holding.symbol}` });
     setIsDeleteModalOpen(true);
   };
 
-  // Prompt Clear All Holdings for Wallet
   const promptClearWalletHoldings = (wallet, count) => {
-    setDeleteTarget({
-      type: 'wallet_holdings',
-      id: wallet._id,
-      walletName: wallet.name,
-      title: `Clear All Holdings in ${wallet.name}`,
-      description: `Permanently delete all ${count} holding(s) belonging to ${wallet.name}.`,
-      requireInputText: 'DELETE',
-    });
+    setDeleteTarget({ type: 'wallet_holdings', id: wallet._id, walletName: wallet.name, title: `Clear All Holdings in ${wallet.name}`, description: `Permanently delete all ${count} holding(s) belonging to ${wallet.name}.`, requireInputText: 'DELETE' });
     setIsDeleteModalOpen(true);
   };
 
-  // Prompt Delete Wallet
   const promptDeleteWallet = (wallet, count = 0) => {
-    setDeleteTarget({
-      type: 'wallet',
-      id: wallet._id,
-      title: `Delete Wallet "${wallet.name}"`,
-      description: `Permanently delete wallet "${wallet.name}" and all ${count} associated asset(s).`,
-      requireInputText: count > 0 ? 'DELETE' : '',
-    });
+    setDeleteTarget({ type: 'wallet', id: wallet._id, title: `Delete Wallet "${wallet.name}"`, description: `Permanently delete wallet "${wallet.name}" and all ${count} associated asset(s).`, requireInputText: count > 0 ? 'DELETE' : '' });
     setIsDeleteModalOpen(true);
   };
 
-  // Confirm Delete Action
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
-
     if (deleteTarget.type === 'holding') {
       await api.delete(`/holdings/${deleteTarget.id}`);
       setHoldings((prev) => prev.filter((h) => h._id !== deleteTarget.id));
@@ -357,26 +281,19 @@ function AppContent() {
       fetchWallets().catch(() => {});
     } else if (deleteTarget.type === 'wallet_holdings') {
       const res = await api.delete(`/holdings/wallet/${deleteTarget.id}`);
-      setHoldings((prev) =>
-        prev.filter((h) => !h.walletId || h.walletId.toString() !== deleteTarget.id.toString())
-      );
+      setHoldings((prev) => prev.filter((h) => !h.walletId || h.walletId.toString() !== deleteTarget.id.toString()));
       showToast(res.data.message || `All holdings cleared from ${deleteTarget.walletName}`, 'success');
       fetchWallets().catch(() => {});
       fetchPortfolioData().catch(() => {});
     } else if (deleteTarget.type === 'wallet') {
       await deleteWallet(deleteTarget.id);
-      setHoldings((prev) =>
-        prev.filter((h) => !h.walletId || h.walletId.toString() !== deleteTarget.id.toString())
-      );
+      setHoldings((prev) => prev.filter((h) => !h.walletId || h.walletId.toString() !== deleteTarget.id.toString()));
       showToast('Wallet and all associated assets deleted successfully', 'success');
       fetchPortfolioData().catch(() => {});
-      if (location.pathname === `/wallets/${deleteTarget.id}`) {
-        navigate('/wallets');
-      }
+      if (location.pathname === `/wallets/${deleteTarget.id}`) navigate('/wallets');
     }
   };
 
-  // Triggered when any extraction tier succeeds (Tier 1 or 2)
   const handleExtractedResults = (extractedItems, tier) => {
     setExtractedData(extractedItems);
     setExtractionTier(tier || 'gemini');
@@ -385,8 +302,7 @@ function AppContent() {
     setIsReviewModalOpen(true);
   };
 
-  // Triggered when all extraction tiers fail — manual fallback (Tier 3)
-  const handleExtractionFailed = (rawText, message) => {
+  const handleExtractionFailed = (rawText) => {
     setExtractedData([]);
     setExtractionTier('manual');
     setManualFallback(true);
@@ -401,173 +317,120 @@ function AppContent() {
     fetchWallets().catch(() => {});
   };
 
+  // Common modal openers (used by both rail and tab bar)
+  const openAddHoldingModal = () => {
+    setHoldingToEdit(null);
+    setTargetWalletId(activeWalletId || '');
+    setIsFormModalOpen(true);
+  };
+
+  const openAddWalletModal = () => {
+    setWalletToEdit(null);
+    setIsWalletModalOpen(true);
+  };
+
+  const openUploadModal = () => {
+    setTargetWalletId(activeWalletId || '');
+    setIsUploadModalOpen(true);
+  };
+
+  const openJsonExtractModal = () => {
+    setTargetWalletId(activeWalletId || '');
+    setIsJsonExtractModalOpen(true);
+  };
+
+  // ── Loading screen ──────────────────────────────────────────────────
   if (authLoading || (isAuthenticated && !initialDataLoaded)) {
     return <LoadingScreen />;
   }
 
+  const isTabBarRoute = TAB_BAR_ROUTES.includes(location.pathname) || location.pathname === '/holdings';
+  const showRail = isAuthenticated;
+
   return (
-    <div className="min-h-screen dark:bg-[#0b0f19] bg-[#f8fafc] dark:text-slate-100 text-slate-900 flex flex-col selection:bg-cyan-500 selection:text-white transition-colors duration-300 relative overflow-hidden">
-      {/* Subtle Ambient Glow Background Orbs */}
-      <div className="pointer-events-none absolute -top-40 -left-40 w-96 h-96 rounded-full bg-cyan-500/10 dark:bg-cyan-500/15 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-40 w-96 h-96 rounded-full bg-indigo-500/10 dark:bg-indigo-500/12 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 left-1/3 w-96 h-96 rounded-full bg-blue-500/10 dark:bg-blue-500/10 blur-3xl" />
+    <CurrencyProvider prices={prices}>
+      {/* Page background handled by body in CSS */}
+      <div style={{ minHeight: '100vh' }}>
+        {/* Toast */}
+        {toast && (
+          <div
+            className="animate-fadeIn"
+            style={{
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 100,
+              padding: '10px 16px',
+              borderRadius: 12,
+              border: `1px solid ${toast.type === 'success' ? 'var(--positive-bg)' : 'var(--negative-bg)'}`,
+              background: 'var(--panel-bg)',
+              color: toast.type === 'success' ? 'var(--positive)' : 'var(--negative)',
+              fontSize: 13,
+              fontWeight: 500,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+              maxWidth: 360,
+            }}
+          >
+            {toast.message}
+          </div>
+        )}
 
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center space-x-2 animate-bounce ${
-            toast.type === 'success'
-              ? 'dark:bg-slate-900 bg-white dark:border-emerald-500/40 border-emerald-500/60 dark:text-emerald-400 text-emerald-600 shadow-emerald-500/10'
-              : 'dark:bg-slate-900 bg-white dark:border-rose-500/40 border-rose-500/60 dark:text-rose-400 text-rose-600 shadow-rose-500/10'
-          }`}
-        >
-          <span>{toast.message}</span>
-        </div>
-      )}
-
-      {/* Sidebar Navigation */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={handleToggleSidebarCollapse}
-        onClose={() => setIsSidebarOpen(false)}
-        onOpenAddWalletModal={() => {
-          setWalletToEdit(null);
-          setIsWalletModalOpen(true);
-        }}
-        holdings={holdings}
-        prices={prices}
-      />
-
-      {/* Main Layout Container */}
-      <div
-        className={`${
-          isAuthenticated ? (isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64') : ''
-        } flex-1 flex flex-col transition-all duration-300`}
-      >
-        {/* Top Navbar Header */}
-        <Navbar
-          isSidebarCollapsed={isSidebarCollapsed}
-          onToggleSidebar={() => {
-            if (window.innerWidth < 1024) {
-              setIsSidebarOpen((prev) => !prev);
-            } else {
-              handleToggleSidebarCollapse();
-            }
-          }}
-          onOpenAddModal={() => {
-            setHoldingToEdit(null);
-            setTargetWalletId(activeWalletId || '');
-            setIsFormModalOpen(true);
-          }}
-          onOpenAddWalletModal={() => {
-            setWalletToEdit(null);
-            setIsWalletModalOpen(true);
-          }}
-          onOpenUploadModal={() => {
-            setTargetWalletId(activeWalletId || '');
-            setIsUploadModalOpen(true);
-          }}
-          onOpenJsonExtractModal={() => {
-            setTargetWalletId(activeWalletId || '');
-            setIsJsonExtractModalOpen(true);
-          }}
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          onRefreshPrices={handleRefreshPrices}
-          refreshingPrices={refreshingPrices}
-          activeWalletName={activeWallet?.name}
-        />
-
-        {/* Main View Router */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <DashboardPage
-                  isAuthenticated={isAuthenticated}
+        {/* App Shell */}
+        <div className="app-shell">
+          {/* Left: Icon Rail (≥1100px) + Expanded Sidebar (when not collapsed) */}
+          {showRail && (
+            <>
+              <IconRail
+                isSidebarCollapsed={isSidebarCollapsed}
+                onToggleCollapse={handleToggleSidebarCollapse}
+                onOpenUploadModal={openUploadModal}
+                onOpenAddModal={openAddHoldingModal}
+                onOpenAddWalletModal={openAddWalletModal}
+                onOpenJsonExtractModal={openJsonExtractModal}
+                onRefreshPrices={handleRefreshPrices}
+              />
+              {!isSidebarCollapsed && (
+                <ExpandedSidebar
+                  onOpenAddWalletModal={openAddWalletModal}
                   holdings={holdings}
                   prices={prices}
-                  loading={loading}
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                  onUpdateHolding={handleOptimisticUpdate}
-                  onDeleteHolding={promptDeleteHolding}
-                  onEditClick={(holding) => {
-                    setHoldingToEdit(holding);
-                    setTargetWalletId(holding.walletId || '');
-                    setIsFormModalOpen(true);
-                  }}
-                  onUpdatePrice={handleUpdatePrice}
-                  onResetPrice={handleResetPrice}
-                  onOpenAuthModal={() => setIsAuthModalOpen(true)}
-                  onOpenAddWalletModal={() => {
-                    setWalletToEdit(null);
-                    setIsWalletModalOpen(true);
-                  }}
-                  rowStatuses={rowStatuses}
+                  wallets={sortedWallets}
                 />
-              }
+              )}
+            </>
+          )}
+
+          {/* Right: Panel */}
+          <div className="app-panel">
+            {/* Top bar */}
+            <TopBar
+              activeWalletName={activeWallet?.name}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
             />
 
-            <Route
-              path="/analytics"
-              element={<AnalyticsPage holdings={holdings} prices={prices} />}
-            />
+            {/* Tab bar (main routes only, authenticated) */}
+            {isAuthenticated && isTabBarRoute && (
+              <TabBar
+                onOpenUploadModal={openUploadModal}
+                onOpenJsonExtractModal={openJsonExtractModal}
+                onOpenAddModal={openAddHoldingModal}
+                onOpenAddWalletModal={openAddWalletModal}
+                onRefreshPrices={handleRefreshPrices}
+                refreshingPrices={refreshingPrices}
+              />
+            )}
 
-            <Route
-              path="/wallets"
-              element={
-                <WalletsPage
-                  holdings={holdings}
-                  prices={prices}
-                  onOpenAddWallet={() => {
-                    setWalletToEdit(null);
-                    setIsWalletModalOpen(true);
-                  }}
-                  onOpenEditWallet={(w) => {
-                    setWalletToEdit(w);
-                    setIsWalletModalOpen(true);
-                  }}
-                  onDeleteWallet={promptDeleteWallet}
-                />
-              }
-            />
-
-            <Route
-              path="/wallets/:id"
-              element={
-                (() => {
-                  // Detect the wallet type from the URL to pick the right detail page
-                  const detailWallet = wallets.find((w) => w._id === activeWalletId);
-                  if (detailWallet?.type === 'cash') {
-                    return (
-                      <CashWalletPage
-                        holdings={holdings}
-                        onDeleteHolding={promptDeleteHolding}
-                        onOpenEditWallet={(w) => {
-                          setWalletToEdit(w);
-                          setIsWalletModalOpen(true);
-                        }}
-                        onDeleteWallet={promptDeleteWallet}
-                        onClearWalletHoldings={promptClearWalletHoldings}
-                        showToast={showToast}
-                        onHoldingAdded={(h) => {
-                          setHoldings((prev) => [h, ...prev]);
-                          fetchPortfolioData().catch(() => {});
-                          fetchWallets().catch(() => {});
-                        }}
-                        onHoldingUpdated={(h) => {
-                          setHoldings((prev) => prev.map((x) => x._id === h._id ? h : x));
-                          fetchWallets().catch(() => {});
-                        }}
-                      />
-                    );
-                  }
-                  return (
-                    <WalletDetailPage
+            {/* Page content */}
+            <div className="page-content" style={{ flex: 1, overflowY: 'auto' }}>
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <OverviewPage
+                      isAuthenticated={isAuthenticated}
                       holdings={holdings}
                       prices={prices}
+                      loading={loading}
                       onUpdateHolding={handleOptimisticUpdate}
                       onDeleteHolding={promptDeleteHolding}
                       onEditClick={(holding) => {
@@ -575,100 +438,157 @@ function AppContent() {
                         setTargetWalletId(holding.walletId || '');
                         setIsFormModalOpen(true);
                       }}
-                      onOpenAddModalWithWallet={(wId) => {
-                        setHoldingToEdit(null);
-                        setTargetWalletId(wId);
+                      onUpdatePrice={handleUpdatePrice}
+                      onResetPrice={handleResetPrice}
+                      onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                      onOpenAddWalletModal={openAddWalletModal}
+                      onRefreshPrices={handleRefreshPrices}
+                      rowStatuses={rowStatuses}
+                    />
+                  }
+                />
+
+                <Route
+                  path="/holdings"
+                  element={
+                    <HoldingsPage
+                      holdings={holdings}
+                      prices={prices}
+                      loading={loading}
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      onUpdateHolding={handleOptimisticUpdate}
+                      onDeleteHolding={promptDeleteHolding}
+                      onEditClick={(holding) => {
+                        setHoldingToEdit(holding);
+                        setTargetWalletId(holding.walletId || '');
                         setIsFormModalOpen(true);
                       }}
-                      onOpenEditWallet={(w) => {
-                        setWalletToEdit(w);
-                        setIsWalletModalOpen(true);
-                      }}
-                      onDeleteWallet={promptDeleteWallet}
-                      onClearWalletHoldings={promptClearWalletHoldings}
                       onUpdatePrice={handleUpdatePrice}
                       onResetPrice={handleResetPrice}
                       rowStatuses={rowStatuses}
                     />
-                  );
-                })()
-              }
-            />
-          </Routes>
-        </main>
+                  }
+                />
 
-        {/* Footer */}
-        <footer className="border-t dark:border-slate-800/80 border-slate-200 py-6 mt-12 dark:bg-slate-950/60 bg-white/70 backdrop-blur-md text-center text-xs dark:text-slate-500 text-slate-500">
-          <p>ApexPortfolio • Multi-Wallet Engine with Google Gemini Vision AI & Real-time Market Analytics</p>
-        </footer>
+                <Route
+                  path="/analytics"
+                  element={<AnalyticsPage holdings={holdings} prices={prices} />}
+                />
+
+                <Route
+                  path="/wallets"
+                  element={
+                    <WalletsPage
+                      holdings={holdings}
+                      prices={prices}
+                      onOpenAddWallet={openAddWalletModal}
+                      onOpenEditWallet={(w) => { setWalletToEdit(w); setIsWalletModalOpen(true); }}
+                      onDeleteWallet={promptDeleteWallet}
+                    />
+                  }
+                />
+
+                <Route
+                  path="/wallets/:id"
+                  element={(() => {
+                    const detailWallet = wallets.find((w) => w._id === activeWalletId);
+                    if (detailWallet?.type === 'cash') {
+                      return (
+                        <CashWalletPage
+                          holdings={holdings}
+                          onDeleteHolding={promptDeleteHolding}
+                          onOpenEditWallet={(w) => { setWalletToEdit(w); setIsWalletModalOpen(true); }}
+                          onDeleteWallet={promptDeleteWallet}
+                          onClearWalletHoldings={promptClearWalletHoldings}
+                          showToast={showToast}
+                          onHoldingAdded={(h) => { setHoldings((prev) => [h, ...prev]); fetchPortfolioData().catch(() => {}); fetchWallets().catch(() => {}); }}
+                          onHoldingUpdated={(h) => { setHoldings((prev) => prev.map((x) => x._id === h._id ? h : x)); fetchWallets().catch(() => {}); }}
+                        />
+                      );
+                    }
+                    return (
+                      <WalletDetailPage
+                        holdings={holdings}
+                        prices={prices}
+                        onUpdateHolding={handleOptimisticUpdate}
+                        onDeleteHolding={promptDeleteHolding}
+                        onEditClick={(holding) => { setHoldingToEdit(holding); setTargetWalletId(holding.walletId || ''); setIsFormModalOpen(true); }}
+                        onOpenAddModalWithWallet={(wId) => { setHoldingToEdit(null); setTargetWalletId(wId); setIsFormModalOpen(true); }}
+                        onOpenEditWallet={(w) => { setWalletToEdit(w); setIsWalletModalOpen(true); }}
+                        onDeleteWallet={promptDeleteWallet}
+                        onClearWalletHoldings={promptClearWalletHoldings}
+                        onUpdatePrice={handleUpdatePrice}
+                        onResetPrice={handleResetPrice}
+                        rowStatuses={rowStatuses}
+                      />
+                    );
+                  })()}
+                />
+              </Routes>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile bottom tab bar */}
+        {isAuthenticated && (
+          <BottomTabBar onOpenUploadModal={openUploadModal} />
+        )}
+
+        {/* Modals */}
+        <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+
+        <HoldingFormModal
+          isOpen={isFormModalOpen}
+          onClose={() => { setIsFormModalOpen(false); setHoldingToEdit(null); setTargetWalletId(''); }}
+          onSave={handleSaveHolding}
+          holdingToEdit={holdingToEdit}
+          wallets={sortedWallets}
+          targetWalletId={targetWalletId}
+        />
+
+        <WalletFormModal
+          isOpen={isWalletModalOpen}
+          onClose={() => { setIsWalletModalOpen(false); setWalletToEdit(null); }}
+          onSave={handleSaveWallet}
+          walletToEdit={walletToEdit}
+        />
+
+        <ScreenshotUploadModal
+          isOpen={isUploadModalOpen}
+          onClose={() => setIsUploadModalOpen(false)}
+          onExtracted={handleExtractedResults}
+          onExtractionFailed={handleExtractionFailed}
+        />
+
+        <JsonExtractModal
+          isOpen={isJsonExtractModalOpen}
+          onClose={() => setIsJsonExtractModalOpen(false)}
+          onExtracted={handleExtractedResults}
+        />
+
+        <ExtractionReviewModal
+          isOpen={isReviewModalOpen}
+          onClose={() => { setIsReviewModalOpen(false); setTargetWalletId(''); }}
+          extractedItems={extractedData}
+          onSaveSuccess={handleBatchSaveSuccess}
+          tier={extractionTier}
+          manualFallback={manualFallback}
+          rawText={extractionRawText}
+          wallets={sortedWallets}
+          targetWalletId={targetWalletId}
+        />
+
+        <DeleteConfirmModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => { setIsDeleteModalOpen(false); setDeleteTarget(null); }}
+          onConfirm={handleConfirmDelete}
+          title={deleteTarget?.title}
+          itemDescription={deleteTarget?.description}
+          requireInputText={deleteTarget?.requireInputText || ''}
+        />
       </div>
-
-      {/* Modals */}
-      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
-
-      <HoldingFormModal
-        isOpen={isFormModalOpen}
-        onClose={() => {
-          setIsFormModalOpen(false);
-          setHoldingToEdit(null);
-          setTargetWalletId('');
-        }}
-        onSave={handleSaveHolding}
-        holdingToEdit={holdingToEdit}
-        wallets={sortedWallets}
-        targetWalletId={targetWalletId}
-      />
-
-      <WalletFormModal
-        isOpen={isWalletModalOpen}
-        onClose={() => {
-          setIsWalletModalOpen(false);
-          setWalletToEdit(null);
-        }}
-        onSave={handleSaveWallet}
-        walletToEdit={walletToEdit}
-      />
-
-      <ScreenshotUploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onExtracted={handleExtractedResults}
-        onExtractionFailed={handleExtractionFailed}
-      />
-
-      <JsonExtractModal
-        isOpen={isJsonExtractModalOpen}
-        onClose={() => setIsJsonExtractModalOpen(false)}
-        onExtracted={handleExtractedResults}
-      />
-
-      <ExtractionReviewModal
-        isOpen={isReviewModalOpen}
-        onClose={() => {
-          setIsReviewModalOpen(false);
-          setTargetWalletId('');
-        }}
-        extractedItems={extractedData}
-        onSaveSuccess={handleBatchSaveSuccess}
-        tier={extractionTier}
-        manualFallback={manualFallback}
-        rawText={extractionRawText}
-        wallets={sortedWallets}
-        targetWalletId={targetWalletId}
-      />
-
-      <DeleteConfirmModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setDeleteTarget(null);
-        }}
-        onConfirm={handleConfirmDelete}
-        title={deleteTarget?.title}
-        itemDescription={deleteTarget?.description}
-        requireInputText={deleteTarget?.requireInputText || ''}
-      />
-    </div>
+    </CurrencyProvider>
   );
 }
 
@@ -677,41 +597,33 @@ class ErrorBoundary extends React.Component {
     super(props);
     this.state = { hasError: false, error: null };
   }
-
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
-
   componentDidCatch(error, errorInfo) {
     console.error('UI Crash intercepted by ErrorBoundary:', error, errorInfo);
   }
-
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950 text-white">
-          <div className="max-w-md w-full glass-panel p-6 rounded-2xl border border-rose-500/30 text-center space-y-4">
-            <h2 className="text-xl font-bold text-rose-400 font-heading">Something went wrong</h2>
-            <p className="text-xs text-slate-400 font-mono leading-relaxed">
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--page-bg)' }}>
+          <div className="card" style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
+            <h2 style={{ color: 'var(--negative)', fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Something went wrong</h2>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: 16, lineHeight: 1.5 }}>
               {this.state.error?.message || 'An unexpected rendering error occurred.'}
             </p>
-            <div className="flex items-center justify-center space-x-3 pt-2">
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
               <button
-                onClick={() => {
-                  this.setState({ hasError: false, error: null });
-                  window.location.reload();
-                }}
-                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                className="btn-primary"
+                onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
               >
                 Reload Page
               </button>
               <button
-                onClick={() => {
-                  this.setState({ hasError: false, error: null });
-                }}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition cursor-pointer"
+                onClick={() => this.setState({ hasError: false, error: null })}
+                style={{ padding: '0 16px', minHeight: 44, borderRadius: 12, border: '1px solid var(--card-border)', background: 'var(--shell-bg)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14 }}
               >
-                Dismiss & Continue
+                Dismiss
               </button>
             </div>
           </div>
@@ -733,4 +645,3 @@ export function App() {
     </BrowserRouter>
   );
 }
-
