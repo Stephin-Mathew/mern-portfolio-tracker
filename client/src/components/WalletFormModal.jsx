@@ -87,13 +87,18 @@ export const WalletFormModal = ({ isOpen, onClose, onSave, walletToEdit }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <div className="glass-panel dark:bg-[#111625] bg-white border dark:border-slate-800 border-slate-200 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        {/* Top Gradient bar matching selected color */}
+    <div className="modal-backdrop animate-fadeIn" onClick={onClose}>
+      <div className="modal-panel" style={{ maxWidth: 540, position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+        {/* Top color bar matching selected wallet color */}
         <div
-          className="absolute top-0 left-0 right-0 h-1.5 transition-all duration-300"
-          style={{ backgroundColor: color }}
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            height: 4, borderRadius: '20px 20px 0 0',
+            backgroundColor: color,
+            transition: 'background-color 0.2s',
+          }}
         />
+
 
         <div className="flex items-center justify-between pb-4 mb-6 border-b dark:border-slate-800 border-slate-200">
           <div className="flex items-center space-x-3">
@@ -249,16 +254,24 @@ export const WalletFormModal = ({ isOpen, onClose, onSave, walletToEdit }) => {
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl dark:bg-slate-800 bg-slate-100 dark:hover:bg-slate-700 hover:bg-slate-200 dark:text-slate-300 text-slate-700 font-semibold text-xs transition cursor-pointer border dark:border-slate-700 border-slate-300"
+              style={{
+                padding: '9px 16px', borderRadius: 10,
+                border: '1px solid var(--card-border)',
+                background: 'var(--shell-bg)',
+                color: 'var(--text-secondary)',
+                fontSize: 13, fontWeight: 500,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition cursor-pointer disabled:opacity-50"
+              className="btn-primary"
+              style={{ opacity: submitting ? 0.6 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}
             >
-              {submitting ? 'Saving...' : walletToEdit ? 'Save Changes' : 'Create Wallet'}
+              {submitting ? 'Saving…' : walletToEdit ? 'Save Changes' : 'Create Wallet'}
             </button>
           </div>
         </form>

@@ -193,8 +193,8 @@ function CashEntryModal({ isOpen, onClose, onSave, entryToEdit, walletId, existi
   const suggestionList = Array.from(new Set([...existingDestinations, ...defaultSuggestions])).slice(0, 6);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="glass-panel w-full max-w-md rounded-3xl border dark:border-slate-800 border-slate-200 shadow-2xl p-6 relative">
+    <div className="modal-backdrop animate-fadeIn" onClick={onClose}>
+      <div className="modal-panel" style={{ maxWidth: 440, position: 'relative' }} onClick={(e) => e.stopPropagation()}>
         <div className="absolute top-0 left-0 right-0 h-1.5 rounded-t-3xl" style={{ backgroundColor: meta.color }} />
         <button
           onClick={onClose}
