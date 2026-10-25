@@ -257,7 +257,7 @@ export function PortfolioValueChart({ prices = {}, refreshKey = 0 }) {
       )}
 
       {/* SVG chart */}
-      <div style={{ flex: 1, minHeight: isMobile ? 210 : 0, position: 'relative' }}>
+      <div style={{ flex: 1, minHeight: isMobile ? 210 : 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', position: 'relative', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
             <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} />
@@ -279,9 +279,10 @@ export function PortfolioValueChart({ prices = {}, refreshKey = 0 }) {
           <svg
             ref={svgRef}
             viewBox={`0 0 ${vbW} ${vbH}`}
+            preserveAspectRatio="xMidYMin meet"
             width="100%"
             height={isMobile ? 210 : '100%'}
-            style={{ display: 'block', overflow: 'visible', cursor: 'crosshair', touchAction: 'pan-y' }}
+            style={{ display: 'block', overflow: 'visible', cursor: 'crosshair', touchAction: 'pan-y', maxHeight: isMobile ? 210 : 285 }}
             role="img"
             aria-label="Line chart of total portfolio value over the selected time range"
             onMouseMove={handleMouseMove}

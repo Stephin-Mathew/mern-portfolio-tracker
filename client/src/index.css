@@ -830,7 +830,14 @@ html.dark [class*="dark:bg-[#0d121f]"] { background: var(--panel-bg) !important;
 
   .r1 > *, .r3 > * {
     height: auto !important;
-    min-height: 340px !important;
+  }
+
+  .r1-holdings-card {
+    height: 380px !important;
+  }
+
+  .r3-wallet-card {
+    height: 340px !important;
   }
 }
 
