@@ -6,7 +6,7 @@ function DataNote({ caption, message }) {
   return (
     <div className="data-note">
       <div className="text-caption">{caption}</div>
-      <div style={{ fontSize: 14, lineHeight: 1.45, marginTop: 4, color: 'var(--text-primary)' }}>
+      <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 4, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
         {message}
       </div>
     </div>

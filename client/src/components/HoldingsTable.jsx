@@ -467,8 +467,8 @@ export const HoldingsTable = ({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm dark:text-slate-300 text-slate-700">
+      <div className="overflow-x-auto" style={{ maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
+        <table className="w-full text-left text-sm dark:text-slate-300 text-slate-700" style={{ minWidth: 680 }}>
           <thead className="dark:bg-slate-900/80 bg-slate-100 text-xs uppercase font-semibold dark:text-slate-400 text-slate-600 border-b dark:border-slate-800 border-slate-200 select-none">
             <tr>
               <th

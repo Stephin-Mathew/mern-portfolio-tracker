@@ -122,7 +122,7 @@ export const WalletsPage = ({
   // ── Render ───────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+      <div className="page-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
         {[1, 2, 3].map((i) => (
           <div key={i} className="card shimmer" style={{ height: 240 }} />
         ))}
@@ -131,7 +131,7 @@ export const WalletsPage = ({
   }
 
   return (
-    <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="page-container wallets-page" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>

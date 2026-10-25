@@ -151,7 +151,7 @@ export const WalletDetailPage = ({
   const accentColor = getWalletColor(wallet, wallets);
 
   return (
-    <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="page-container wallet-detail-page" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Breadcrumb + actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <Link

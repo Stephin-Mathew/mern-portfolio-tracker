@@ -21,18 +21,30 @@ function StatCardSkeleton() {
 function StatCard({ label, value, subLine, subIsPositive, subTrail, loading }) {
   if (loading) return <StatCardSkeleton />;
   return (
-    <div className="card">
-      <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>{label}</div>
-      <div className="stat-value">{value}</div>
-      {subLine != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 500, flexWrap: 'wrap' }}>
-          {subIsPositive === true && <TrendingUp size={13} color="var(--positive)" />}
-          {subIsPositive === false && <TrendingDown size={13} color="var(--negative)" />}
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{label}</div>
+      <div
+        className="stat-value"
+        style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {value}
+      </div>
+      {subLine != null ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 500, flexWrap: 'wrap', minHeight: 18 }}>
+          {subIsPositive === true && <TrendingUp size={12} color="var(--positive)" />}
+          {subIsPositive === false && <TrendingDown size={12} color="var(--negative)" />}
           <span style={{ color: subIsPositive === true ? 'var(--positive)' : subIsPositive === false ? 'var(--negative)' : 'var(--text-muted)' }}>
             {subLine}
           </span>
           {subTrail && <span style={{ color: 'var(--text-muted)' }}>{subTrail}</span>}
         </div>
+      ) : (
+        <div style={{ minHeight: 18 }} />
       )}
     </div>
   );
@@ -108,7 +120,7 @@ export function OverviewPage({
   }
 
   return (
-    <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="page-container overview-page" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ── Row 1: 5 stat cards ────────────────────────────────── */}
       <div
@@ -189,10 +201,10 @@ export function OverviewPage({
 
       {/* ── Row 2: Chart (flex 2.1) + Holdings panel (flex 1.05) ── */}
       <div className="r1" style={{ display: 'flex', gap: 16 }}>
-        <div className="card" style={{ flex: 2.1, minWidth: 0, height: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="card" style={{ flex: 2.1, minWidth: 0, minHeight: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <PortfolioValueChart prices={prices} />
         </div>
-        <div className="card" style={{ flex: 1.05, minWidth: 0, height: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="card" style={{ flex: 1.05, minWidth: 0, minHeight: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <HoldingsPanel
             perSymbol={metrics.perSymbol}
             prices={prices}
@@ -203,26 +215,28 @@ export function OverviewPage({
 
       {/* ── Row 3: three equal cards ────────────────────────────── */}
       <div className="r3" style={{ display: 'flex', gap: 16 }}>
-        <div className="card" style={{ flex: 1, minWidth: 0, height: 440, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="card" style={{ flex: 1, minWidth: 0, minHeight: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <WalletWeightCard
             perWallet={metrics.perWallet}
             wallets={wallets}
             totalPositions={metrics.positionsCount}
           />
         </div>
-        <div className="card" style={{ flex: 1, minWidth: 0, height: 440, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="card" style={{ flex: 1, minWidth: 0, minHeight: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <TopMoversCard movers={metrics.movers} />
         </div>
-        <div className="card" style={{ flex: 1, minWidth: 0, height: 440, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="card" style={{ flex: 1, minWidth: 0, minHeight: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <DataHealthCard prices={prices} onRefreshPrices={onRefreshPrices} />
         </div>
       </div>
 
       <style>{`
         @media (max-width: 1099px) {
-          .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .r1, .r3 { flex-direction: column !important; }
-          .r1 > *, .r3 > * { height: auto !important; min-height: 380px; }
+          .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+          .stats-grid > div:first-child { grid-column: 1 / -1 !important; }
+          .stats-grid > div:first-child .stat-value { font-size: 26px !important; }
+          .r1, .r3 { flex-direction: column !important; gap: 12px !important; }
+          .r1 > *, .r3 > * { height: auto !important; min-height: 340px !important; }
         }
       `}</style>
     </div>

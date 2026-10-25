@@ -242,7 +242,7 @@ export function TabBar({
   return (
     <div className="tab-bar">
       {/* Tabs */}
-      <div role="tablist" style={{ display: 'flex' }}>
+      <div role="tablist" style={{ display: 'flex', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {[
           { to: '/', label: 'Overview', end: true },
           { to: '/holdings', label: 'Holdings', end: true },
@@ -262,15 +262,16 @@ export function TabBar({
       </div>
 
       {/* Right: currency + import */}
-      <div style={{ display: 'flex', gap: 10, padding: '8px 0', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, padding: '6px 0', alignItems: 'center', flexWrap: 'nowrap' }}>
         {/* Currency segmented control */}
-        <div className="seg" role="group" aria-label="Display currency">
+        <div className="seg seg-sm" role="group" aria-label="Display currency" style={{ padding: 2 }}>
           {currencies.map((c) => (
             <button
               key={c}
               className={`seg-btn${currency === c ? ' active' : ''}`}
               aria-pressed={currency === c}
               onClick={() => setCurrency(c)}
+              style={{ padding: '0 8px', minHeight: 28, fontSize: 11 }}
             >
               {c}
             </button>
@@ -284,10 +285,10 @@ export function TabBar({
             onClick={() => setImportOpen((p) => !p)}
             aria-expanded={importOpen}
             aria-label="Import with AI"
-            style={{ gap: 8, fontSize: 14 }}
+            style={{ gap: 6, fontSize: 13, minHeight: 32, padding: '0 12px' }}
           >
-            <Sparkles size={16} strokeWidth={1.8} />
-            Import with AI
+            <Sparkles size={15} strokeWidth={1.8} />
+            <span>Import</span>
           </button>
 
           {importOpen && (

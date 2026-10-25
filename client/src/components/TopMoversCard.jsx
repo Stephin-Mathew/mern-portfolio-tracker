@@ -8,16 +8,16 @@ function MoverRow({ symbol, name, change24h, isGainer }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '9px 0',
+        padding: '8px 0',
         borderBottom: '1px solid var(--divider-2)',
-        gap: 8,
+        gap: 6,
       }}
     >
-      <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.2, minWidth: 0 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.2, minWidth: 0, flex: 1 }}>
         <div style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{symbol}</div>
-        <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
       </div>
-      <span className={`chip ${isGainer ? 'chip-positive' : 'chip-negative'}`} style={{ flexShrink: 0 }}>
+      <span className={`chip ${isGainer ? 'chip-positive' : 'chip-negative'}`} style={{ flexShrink: 0, fontSize: 11, padding: '2px 6px' }}>
         {change24h >= 0 ? '+' : ''}{change24h.toFixed(1)}%
       </span>
     </div>
@@ -45,7 +45,7 @@ export function TopMoversCard({ movers = {} }) {
           scrollbarWidth: 'thin',
         }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
           {/* Gainers caption */}
           <div className="text-caption" style={{ color: 'var(--positive)', paddingBottom: 4, position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1 }}>
             Gainers

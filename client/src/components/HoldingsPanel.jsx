@@ -30,20 +30,20 @@ function HoldingRow({ row, prices }) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '1.55fr 1.15fr .9fr .8fr',
+        gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.8fr)',
         alignItems: 'center',
-        gap: 8,
-        padding: '10px 0',
+        gap: 6,
+        padding: '8px 0',
         borderBottom: '1px solid var(--divider-2)',
         overflow: 'hidden',
       }}
     >
       {/* Asset column */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
         <div
           style={{
-            width: 32,
-            height: 32,
+            width: 28,
+            height: 28,
             borderRadius: '50%',
             background: color,
             display: 'flex',
@@ -51,14 +51,27 @@ function HoldingRow({ row, prices }) {
             justifyContent: 'center',
             color: '#fff',
             fontWeight: 600,
-            fontSize: 12,
+            fontSize: 11,
             flexShrink: 0,
           }}
         >
           {letter}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.2, color: 'var(--text-primary)' }}>{row.symbol}</div>
+        <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              lineHeight: 1.25,
+              color: 'var(--text-primary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+            title={row.symbol}
+          >
+            {row.symbol}
+          </div>
           <div
             style={{
               fontSize: 11,
@@ -68,6 +81,7 @@ function HoldingRow({ row, prices }) {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }}
+            title={name}
           >
             {name}
           </div>
@@ -75,24 +89,24 @@ function HoldingRow({ row, prices }) {
       </div>
 
       {/* Price column */}
-      <div style={{ textAlign: 'right', fontSize: 13, whiteSpace: 'nowrap', color: 'var(--text-primary)', minWidth: 0 }}>
+      <div style={{ textAlign: 'right', fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {fmtPrice(row.price)}
       </div>
 
       {/* Weight column */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 12, minWidth: 0, overflow: 'hidden' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 4, minWidth: 0, overflow: 'hidden' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           {row.weightPct < 1 ? '<1%' : `${row.weightPct.toFixed(0)}%`}
         </span>
         <WeightBar pct={row.weightPct} />
       </div>
 
       {/* 24h chip column */}
-      <div style={{ textAlign: 'right', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ textAlign: 'right', minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
         {row.isFixed ? (
-          <span className="chip chip-warning">Fixed</span>
+          <span className="chip chip-warning" style={{ fontSize: 11, padding: '2px 6px' }}>Fixed</span>
         ) : (
-          <span className={`chip ${isPos ? 'chip-positive' : isNeg ? 'chip-negative' : 'chip-neutral'}`}>
+          <span className={`chip ${isPos ? 'chip-positive' : isNeg ? 'chip-negative' : 'chip-neutral'}`} style={{ fontSize: 11, padding: '2px 6px' }}>
             {isPos ? '+' : ''}{ch24.toFixed(1)}%
           </span>
         )}
@@ -148,8 +162,8 @@ export function HoldingsPanel({ perSymbol = [], prices = {}, loading }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1.55fr 1.15fr .9fr .8fr',
-          gap: 8,
+          gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.8fr)',
+          gap: 6,
           padding: '0 0 8px',
           borderBottom: '1px solid var(--divider-1)',
           position: 'sticky',
@@ -162,10 +176,10 @@ export function HoldingsPanel({ perSymbol = [], prices = {}, loading }) {
           <span
             key={h}
             style={{
-              fontSize: 12,
+              fontSize: 11,
               color: 'var(--text-muted)',
               textAlign: i === 1 || i === 3 ? 'right' : 'left',
-              paddingLeft: i === 2 ? 12 : 0,
+              paddingLeft: i === 2 ? 4 : 0,
             }}
           >
             {h}

@@ -105,13 +105,13 @@ export function WalletWeightCard({ perWallet = [], wallets = [], totalPositions 
               style={{ textDecoration: 'none', display: 'block', padding: '12px 0', borderBottom: '1px solid var(--divider-2)' }}
             >
               {/* Name row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, gap: 8 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                   <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{w.wallet?.name}</span>
-                  {isLargest && <span className="chip chip-positive" style={{ padding: '2px 6px', fontSize: 11 }}>Largest</span>}
+                  <span style={{ fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.wallet?.name}</span>
+                  {isLargest && <span className="chip chip-positive" style={{ padding: '2px 6px', fontSize: 11, flexShrink: 0 }}>Largest</span>}
                 </span>
-                <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{w.pct.toFixed(0)}%</span>
+                <span style={{ fontWeight: 500, color: 'var(--text-primary)', flexShrink: 0 }}>{w.pct.toFixed(0)}%</span>
               </div>
 
               {/* Sub row */}

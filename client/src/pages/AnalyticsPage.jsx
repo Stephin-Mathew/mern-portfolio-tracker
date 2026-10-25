@@ -36,7 +36,7 @@ export const AnalyticsPage = ({ holdings = [], prices = {} }) => {
   };
 
   return (
-    <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="page-container analytics-page" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
@@ -113,7 +113,7 @@ export const AnalyticsPage = ({ holdings = [], prices = {} }) => {
       </div>
 
       {/* Summary stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+      <div className="analytics-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 12 }}>
         {[
           { label: 'Total Value', value: fmt(metrics.totalValue) },
           { label: "Today's Change", value: `${metrics.change24h.pct >= 0 ? '+' : ''}${metrics.change24h.pct.toFixed(2)}%` },
@@ -121,13 +121,13 @@ export const AnalyticsPage = ({ holdings = [], prices = {} }) => {
         ].map(({ label, value }) => (
           <div key={label} className="card" style={{ padding: '14px 16px' }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{value}</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: 'var(--text-primary)', letterSpacing: '-0.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
           </div>
         ))}
       </div>
 
       {/* Chart */}
-      <div className="card" style={{ height: 460, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="card" style={{ minHeight: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <PortfolioValueChart prices={prices} refreshKey={refreshKey} />
       </div>
 

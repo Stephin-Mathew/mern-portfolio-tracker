@@ -32,7 +32,7 @@ export function HoldingsPage({
   };
 
   return (
-    <div style={{ padding: '20px 24px 24px' }}>
+    <div className="page-container holdings-page">
       {/* Header row with asset type tabs */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <AssetTypeTabs activeTab={activeTab} setActiveTab={setActiveTab} counts={tabCounts} />
