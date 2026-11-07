@@ -61,6 +61,17 @@ const priceCacheSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    // Previous trading-day close price (stocks only) — used to compute accurate daily change
+    prevDayClose: {
+      type: Number,
+      default: null,
+    },
+    // Yahoo Finance market state: 'REGULAR' | 'POST' | 'PRE' | 'CLOSED'
+    // null means unknown / not a stock (crypto trades 24/7)
+    marketState: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
