@@ -219,6 +219,30 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
   const highestPoint = Math.max(...dataPoints.map((p) => p.totalValue), currentVal);
   const lowestPoint = Math.min(...dataPoints.map((p) => p.totalValue), currentVal);
 
+  const athPoint = dataPoints.find((p) => p.totalValue === highestPoint) || {
+    timestamp: new Date(),
+    totalValue: highestPoint,
+  };
+
+  let runningPeak = 0;
+  let maxDdAmt = 0;
+  let maxDdPct = 0;
+  for (const pt of dataPoints) {
+    if (pt.totalValue > runningPeak) {
+      runningPeak = pt.totalValue;
+    } else if (runningPeak > 0) {
+      const ddAmt = pt.totalValue - runningPeak;
+      const ddPct = (ddAmt / runningPeak) * 100;
+      if (ddPct < maxDdPct) {
+        maxDdPct = ddPct;
+        maxDdAmt = ddAmt;
+      }
+    }
+  }
+
+  const currentDdAmt = endValue - highestPoint;
+  const currentDdPct = highestPoint > 0 ? (currentDdAmt / highestPoint) * 100 : 0;
+
   return {
     timeframe,
     label: config.label,
@@ -233,6 +257,19 @@ export const getPortfolioHistory = async (userId, timeframe = '30d') => {
       lowestValue: Number(lowestPoint.toFixed(2)),
       totalCost: Number(currentCost.toFixed(2)),
       totalPnL: Number((currentVal - currentCost).toFixed(2)),
+      ath: {
+        value: Number(highestPoint.toFixed(2)),
+        timestamp: athPoint.timestamp,
+        daysSince: athPoint.timestamp ? Math.max(0, Math.floor((Date.now() - new Date(athPoint.timestamp).getTime()) / (1000 * 60 * 60 * 24))) : 0,
+      },
+      currentDrawdown: {
+        amount: Number(currentDdAmt.toFixed(2)),
+        pct: Number(currentDdPct.toFixed(2)),
+      },
+      maxDrawdown: {
+        amount: Number(maxDdAmt.toFixed(2)),
+        pct: Number(maxDdPct.toFixed(2)),
+      },
     },
   };
 };

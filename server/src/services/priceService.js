@@ -152,8 +152,13 @@ const fetchYahooPrice = async (ticker) => {
     const currentPrice = meta.regularMarketPrice ?? meta.chartPreviousClose ?? null;
     if (!currentPrice) return null;
 
-    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
-    const change24h = prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
+    // previousClose is the last completed trading-day close price
+    const prevDayClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+    const change24h = prevDayClose && prevDayClose > 0 ? ((currentPrice - prevDayClose) / prevDayClose) * 100 : 0;
+
+    // Yahoo Finance market state: 'REGULAR' | 'POST' | 'PRE' | 'CLOSED'
+    // On weekends both US and Indian markets are CLOSED
+    const marketState = meta.marketState ?? null;
 
     // Compute 7d and 30d changes from historical closes
     const closes = result.indicators?.quote?.[0]?.close ?? [];
@@ -173,18 +178,22 @@ const fetchYahooPrice = async (ticker) => {
     // Check if the stock is quoted in INR (e.g. NSE .NS, BSE .BO, or Yahoo meta currency)
     const isINR = meta.currency === 'INR' || ticker.endsWith('.NS') || ticker.endsWith('.BO');
     let priceInUsd = Number(currentPrice);
+    let prevDayCloseInUsd = prevDayClose ? Number(prevDayClose) : null;
     if (isINR) {
       const inrRate = await fetchLiveInrRate();
       priceInUsd = inrRate > 0 ? Number(currentPrice) / inrRate : Number(currentPrice);
+      prevDayCloseInUsd = prevDayClose && inrRate > 0 ? Number(prevDayClose) / inrRate : prevDayCloseInUsd;
     }
 
     return {
       price: Number(priceInUsd.toFixed(6)),
+      prevDayClose: prevDayCloseInUsd !== null ? Number(prevDayCloseInUsd.toFixed(6)) : null,
       priceInr: isINR ? Number(currentPrice) : null,
       currency: isINR ? 'INR' : (meta.currency || 'USD'),
       change24h: Number(change24h.toFixed(4)),
       change7d: Number(change7d.toFixed(4)),
       change30d: Number(change30d.toFixed(4)),
+      marketState,
       assetType: 'stock',
     };
   } catch (err) {
@@ -670,6 +679,11 @@ export const getPricesForSymbols = async (symbols = [], userId = null) => {
         change24h: entry.change24h || 0,
         change7d: entry.change7d || 0,
         change30d: entry.change30d || 0,
+        ...(entry.assetType === 'stock' && {
+          prevDayClose: entry.prevDayClose ?? null,
+          marketState: entry.marketState ?? null,
+          assetType: 'stock',
+        }),
         ...(entry.assetType === 'mutual_fund' && {
           navInr: entry.navInr ?? null,
           schemeName: entry.schemeName ?? null,
@@ -688,6 +702,11 @@ export const getPricesForSymbols = async (symbols = [], userId = null) => {
         change30d: entry.change30d || 0,
         currency: entry.currency || 'USD',
         priceInr: entry.priceInr ?? null,
+        ...(entry.assetType === 'stock' && {
+          prevDayClose: entry.prevDayClose ?? null,
+          marketState: entry.marketState ?? null,
+          assetType: 'stock',
+        }),
         ...(entry.assetType === 'mutual_fund' && {
           navInr: entry.navInr ?? null,
           schemeName: entry.schemeName ?? null,
@@ -755,6 +774,8 @@ export const getPricesForSymbols = async (symbols = [], userId = null) => {
           change24h: Number(targetQuote.change24h || 0),
           change7d: Number(targetQuote.change7d || 0),
           change30d: Number(targetQuote.change30d || 0),
+          prevDayClose: targetQuote.prevDayClose ?? null,
+          marketState: targetQuote.marketState ?? null,
           isCustom: true,
           isLocked: !!ov.isLocked,
           mappedSymbol: mappedTarget,
@@ -1024,6 +1045,12 @@ export const fetchAndCachePrices = async (symbols = []) => {
         assetType,
         lastUpdated: new Date(),
       };
+
+      // Persist stock-specific daily close & market state for accurate daily change tracking
+      if (assetType === 'stock') {
+        if (entry.prevDayClose != null) cacheUpdate.prevDayClose = entry.prevDayClose;
+        if (entry.marketState != null) cacheUpdate.marketState = entry.marketState;
+      }
 
       // Persist mutual fund specific fields
       if (assetType === 'mutual_fund') {

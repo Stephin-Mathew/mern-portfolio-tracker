@@ -202,7 +202,7 @@ export function OverviewPage({
       {/* ── Row 2: Chart (flex 2.1) + Holdings panel (flex 1.05) ── */}
       <div className="r1" style={{ display: 'flex', gap: 16 }}>
         <div className="card r1-chart-card" style={{ flex: 2.1, minWidth: 0, height: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <PortfolioValueChart prices={prices} />
+          <PortfolioValueChart holdings={holdings} prices={prices} />
         </div>
         <div className="card r1-holdings-card" style={{ flex: 1.05, minWidth: 0, height: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <HoldingsPanel

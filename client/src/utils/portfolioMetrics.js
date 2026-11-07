@@ -78,12 +78,18 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
     const start24 = ch24 !== 0 ? price / (1 + ch24 / 100) : price;
     const start7 = ch7 !== 0 ? price / (1 + ch7 / 100) : price;
 
-    total24hPnL += qty * (price - start24);
-    total7dPnL += qty * (price - start7);
+    const pnl24 = qty * (price - start24);
+    const pnl7 = qty * (price - start7);
+
+    total24hPnL += pnl24;
+    total7dPnL += pnl7;
+
+    const rawCost = (h.avgBuyPrice != null && Number(h.avgBuyPrice) > 0)
+      ? qty * Number(h.avgBuyPrice)
+      : 0;
+    const cost = isINR && inrRate > 0 ? rawCost / inrRate : rawCost;
 
     if (h.assetType === 'stock' || h.assetType === 'mutual_fund') {
-      const rawCost = qty * (Number(h.avgBuyPrice) || 0);
-      const cost = isINR && inrRate > 0 ? rawCost / inrRate : rawCost;
       totalStockCost += cost;
       stockFundPnL += val - cost;
     }
@@ -96,6 +102,11 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
         name: entry?.name || h.mfSchemeName || h.symbol || sym,
         price,
         valueUsd: 0,
+        costUsd: 0,
+        hasCostBasis: false,
+        quantity: 0,
+        pnl24hUsd: 0,
+        pnl7dUsd: 0,
         change24h: ch24,
         change7d: ch7,
         isFixed: Boolean(entry?.isCustom && !entry?.mappedSymbol),
@@ -106,6 +117,13 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
     }
     const row = symbolMap.get(sym);
     row.valueUsd += val;
+    row.quantity += qty;
+    row.pnl24hUsd += pnl24;
+    row.pnl7dUsd += pnl7;
+    if (cost > 0) {
+      row.costUsd += cost;
+      row.hasCostBasis = true;
+    }
     // Use latest price entry if multiple holdings
     if (entry) {
       row.price = price;
@@ -117,10 +135,16 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
   // Build sorted perSymbol array
   const perSymbol = [...symbolMap.values()]
     .sort((a, b) => b.valueUsd - a.valueUsd)
-    .map((row) => ({
-      ...row,
-      weightPct: totalValue > 0 ? (row.valueUsd / totalValue) * 100 : 0,
-    }));
+    .map((row) => {
+      const unrealizedPnlUsd = row.hasCostBasis ? row.valueUsd - row.costUsd : 0;
+      const roiPct = (row.hasCostBasis && row.costUsd > 0) ? (unrealizedPnlUsd / row.costUsd) * 100 : 0;
+      return {
+        ...row,
+        unrealizedPnlUsd,
+        roiPct,
+        weightPct: totalValue > 0 ? (row.valueUsd / totalValue) * 100 : 0,
+      };
+    });
 
   // Per-wallet breakdown
   const walletMap = new Map();
@@ -145,15 +169,39 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
       pct: totalValue > 0 ? (row.valueUsd / totalValue) * 100 : 0,
     }));
 
-  // Top movers (aggregate change24h by weighted average per symbol)
+  // Top movers — use change24h from the price API (which is always vs the previous trading-day
+  // close, not vs the buy price). For stocks the market state tells us whether trading is live.
+  // Stocks on weekends / market-closed hours still show last-session change but are flagged so
+  // the UI can display "Last Session" instead of "Today".
   const moversRaw = perSymbol
     .filter((s) => s.change24h !== 0 && s.assetType !== 'cash')
-    .map((s) => ({
-      symbol: s.symbol,
-      name: s.name,
-      change24h: s.change24h,
-      assetType: s.assetType,
-    }));
+    .map((s) => {
+      const entry = prices[s.symbol];
+      // Stocks: derive daily change from prevDayClose when available for accuracy;
+      // otherwise fall back to the cached change24h from the API.
+      let dailyChange = s.change24h;
+      if (s.assetType === 'stock' && entry?.prevDayClose && entry.prevDayClose > 0 && s.price > 0) {
+        dailyChange = ((s.price - entry.prevDayClose) / entry.prevDayClose) * 100;
+      }
+
+      // A stock is "market closed" if its marketState is not REGULAR (or PRE/POST for extended hours).
+      // Crypto trades 24/7 so it is never market-closed.
+      const marketState = entry?.marketState ?? null;
+      const isMarketClosed =
+        s.assetType === 'stock' &&
+        marketState !== null &&
+        marketState !== 'REGULAR' &&
+        marketState !== 'PRE' &&
+        marketState !== 'POST';
+
+      return {
+        symbol: s.symbol,
+        name: s.name,
+        change24h: Number(dailyChange.toFixed(4)),
+        assetType: s.assetType,
+        isMarketClosed,
+      };
+    });
 
   const gainers = moversRaw
     .filter((m) => m.change24h > 0)
@@ -173,6 +221,85 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
 
   const stockFundPct = totalStockCost > 0 ? (stockFundPnL / totalStockCost) * 100 : 0;
 
+  // Dollar Movers (actual currency gainers and losers)
+  const dollarGainers24h = perSymbol
+    .filter((s) => (s.pnl24hUsd || 0) > 0.01 && s.assetType !== 'cash')
+    .sort((a, b) => b.pnl24hUsd - a.pnl24hUsd)
+    .slice(0, 5);
+
+  const dollarLosers24h = perSymbol
+    .filter((s) => (s.pnl24hUsd || 0) < -0.01 && s.assetType !== 'cash')
+    .sort((a, b) => a.pnl24hUsd - b.pnl24hUsd)
+    .slice(0, 5);
+
+  const dollarGainers7d = perSymbol
+    .filter((s) => (s.pnl7dUsd || 0) > 0.01 && s.assetType !== 'cash')
+    .sort((a, b) => b.pnl7dUsd - a.pnl7dUsd)
+    .slice(0, 5);
+
+  const dollarLosers7d = perSymbol
+    .filter((s) => (s.pnl7dUsd || 0) < -0.01 && s.assetType !== 'cash')
+    .sort((a, b) => a.pnl7dUsd - b.pnl7dUsd)
+    .slice(0, 5);
+
+  // Asset class performance & contribution
+  const assetTypes = ['crypto', 'stock', 'mutual_fund', 'cash'];
+  const assetClassBreakdown = {};
+  for (const type of assetTypes) {
+    const list = perSymbol.filter((s) => s.assetType === type);
+    const valueUsd = list.reduce((sum, s) => sum + s.valueUsd, 0);
+    const costUsd = list.reduce((sum, s) => sum + (s.costUsd || 0), 0);
+    const pnl24hUsd = list.reduce((sum, s) => sum + (s.pnl24hUsd || 0), 0);
+    const pnl7dUsd = list.reduce((sum, s) => sum + (s.pnl7dUsd || 0), 0);
+    const base24 = valueUsd - pnl24hUsd;
+    const base7 = valueUsd - pnl7dUsd;
+    assetClassBreakdown[type] = {
+      type,
+      valueUsd,
+      costUsd,
+      pnl24hUsd,
+      pnl7dUsd,
+      weightPct: totalValue > 0 ? (valueUsd / totalValue) * 100 : 0,
+      return24hPct: base24 > 0 ? (pnl24hUsd / base24) * 100 : 0,
+      return7dPct: base7 > 0 ? (pnl7dUsd / base7) * 100 : 0,
+      holdingsCount: list.length,
+    };
+  }
+
+  // Unrealized P&L & Cost basis analysis (all holdings with recorded avgBuyPrice)
+  const costBasisHoldings = perSymbol
+    .filter((s) => s.hasCostBasis && s.costUsd > 0)
+    .sort((a, b) => b.unrealizedPnlUsd - a.unrealizedPnlUsd);
+
+  const totalCostBasisUsd = costBasisHoldings.reduce((sum, s) => sum + s.costUsd, 0);
+  const totalCostMarketValueUsd = costBasisHoldings.reduce((sum, s) => sum + s.valueUsd, 0);
+  const netUnrealizedPnlUsd = totalCostMarketValueUsd - totalCostBasisUsd;
+  const netRoiPct = totalCostBasisUsd > 0 ? (netUnrealizedPnlUsd / totalCostBasisUsd) * 100 : 0;
+
+  const profitablePositions = costBasisHoldings.filter((s) => (s.unrealizedPnlUsd || 0) > 0.01);
+  const lossPositions = costBasisHoldings.filter((s) => (s.unrealizedPnlUsd || 0) < -0.01);
+  const neutralPositions = costBasisHoldings.filter((s) => Math.abs(s.unrealizedPnlUsd || 0) <= 0.01);
+
+  const bestRoi = [...costBasisHoldings].sort((a, b) => (b.roiPct || 0) - (a.roiPct || 0))[0] || null;
+  const bestDollar = costBasisHoldings[0] || null;
+  const worstDollar = costBasisHoldings[costBasisHoldings.length - 1] || null;
+
+  const unrealizedAnalysis = {
+    hasData: costBasisHoldings.length > 0,
+    totalCostUsd: totalCostBasisUsd,
+    totalValueUsd: totalCostMarketValueUsd,
+    netPnlUsd: netUnrealizedPnlUsd,
+    roiPct: netRoiPct,
+    profitableCount: profitablePositions.length,
+    lossCount: lossPositions.length,
+    neutralCount: neutralPositions.length,
+    totalCount: costBasisHoldings.length,
+    bestRoi,
+    bestDollar,
+    worstDollar: (worstDollar && (worstDollar.unrealizedPnlUsd || 0) < 0) ? worstDollar : null,
+    positions: costBasisHoldings,
+  };
+
   return {
     totalValue,
     change24h: { amount: total24hPnL, pct: change24hPct },
@@ -183,6 +310,14 @@ export function computePortfolio(holdings = [], prices = {}, wallets = []) {
     perSymbol,
     perWallet,
     movers: { gainers, losers },
+    dollarMovers: {
+      gainers24h: dollarGainers24h,
+      losers24h: dollarLosers24h,
+      gainers7d: dollarGainers7d,
+      losers7d: dollarLosers7d,
+    },
+    assetClassBreakdown,
+    unrealizedAnalysis,
   };
 }
 
